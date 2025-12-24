@@ -19,3 +19,5 @@ services:
       - DB_DATABASE=${DB_DATABASE}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+    networks:
+      - ${NETWORK_NAME}
