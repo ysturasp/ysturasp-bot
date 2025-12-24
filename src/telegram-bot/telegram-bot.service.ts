@@ -13,6 +13,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../database/entities/user.entity';
 import { Subscription } from '../database/entities/subscription.entity';
+import { Exam } from '../database/entities/exam.entity';
 import { ScheduleService } from '../schedule/schedule.service';
 import { formatSchedule } from '../helpers/schedule-formatter';
 
@@ -26,8 +27,53 @@ export class TelegramBotService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    @InjectRepository(Exam)
+    private readonly examRepository: Repository<Exam>,
     private readonly scheduleService: ScheduleService,
   ) {}
+  @Command('exams')
+  async onExams(@Ctx() ctx: Context) {
+    const user = await this.getUser(ctx);
+    const sub = await this.subscriptionRepository.findOne({
+      where: { user: { id: user.id } },
+      order: { id: 'DESC' },
+    });
+    if (!sub) {
+      await ctx.reply(
+        '❌ У вас нет активных подписок. Используйте /subscribe чтобы добавить группу.',
+      );
+      return;
+    }
+
+    const normalizedGroupName = sub.groupName.trim().toLowerCase();
+
+    const exams = await this.examRepository
+      .createQueryBuilder('exam')
+      .where('LOWER(exam.groupName) = :groupName', {
+        groupName: normalizedGroupName,
+      })
+      .orderBy('exam.date', 'ASC')
+      .getMany();
+
+    if (!exams.length) {
+      await ctx.reply('Экзамены для вашей группы не найдены.');
+      return;
+    }
+
+    const formatDate = (isoDate: string): string => {
+      const date = new Date(isoDate);
+      return date.toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+      });
+    };
+
+    let msg = `🎓 <b>Экзамены для группы ${sub.groupName}</b>\n\n`;
+    for (const exam of exams) {
+      msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}\n`;
+    }
+    await ctx.reply(msg, { parse_mode: 'HTML' });
+  }
 
   @Start()
   async onStart(@Ctx() ctx: Context) {

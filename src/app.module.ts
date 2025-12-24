@@ -12,6 +12,7 @@ import { Subscription } from './database/entities/subscription.entity';
 import { Poll } from './database/entities/poll.entity';
 import { PollAnswer } from './database/entities/poll-answer.entity';
 import { SupportRequest } from './database/entities/support-request.entity';
+import { Exam } from './database/entities/exam.entity';
 import { ScheduleModule } from './schedule/schedule.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -36,7 +37,7 @@ import { NotificationsModule } from './notifications/notifications.module';
         username: configService.get<string>('DB_USERNAME', 'postgres'),
         password: configService.get<string>('DB_PASSWORD', 'postgres'),
         database: configService.get<string>('DB_DATABASE', 'postgres'),
-        entities: [User, Subscription, Poll, PollAnswer, SupportRequest],
+        entities: [User, Subscription, Poll, PollAnswer, SupportRequest, Exam],
         synchronize: true,
       }),
       inject: [ConfigService],
