@@ -52,20 +52,32 @@ export class TelegramBotService {
 
     const message = `👋 Привет, ${user.first_name}! Я бот для расписания занятий.
 
-📅 Используйте кнопки ниже для быстрого доступа к расписанию!
+Вот что я умею:
+/support — Отправить проблему
+/suggestion — Оставить предложение
+/subscribe — Подписаться на уведомления
+/unsubscribe — Отписаться от уведомлений
+/subscriptions — Мои подписки
+/exams — Экзамены
+/today — Расписание на сегодня
+/tomorrow — Расписание на завтра
+/week — Расписание на неделю
 
-/support - Отправить проблему
-/suggestion - Оставить предложение
-/subscribe - Подписаться на уведомления
-/subscriptions - Мои подписки
-/exams - Экзамены`;
+Также вы можете просто ввести название группы (например, ЦИС-33), чтобы посмотреть расписание или подписаться на уведомления.
 
-    await ctx.reply(message, this.getMainKeyboard());
-  }
+📅 Используйте кнопки ниже для быстрого доступа к расписанию!`;
 
-  @Command('menu')
-  async onMenu(@Ctx() ctx: Context) {
-    await ctx.reply('📋 Меню:', this.getMainKeyboard());
+    await ctx.reply(message, {
+      ...this.getMainKeyboard(),
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.url(
+            'Открыть приложение',
+            'https://t.me/ysturasp_bot/ysturasp_webapp',
+          ),
+        ],
+      ]),
+    });
   }
 
   @Command('subscribe')
@@ -254,13 +266,25 @@ export class TelegramBotService {
     const text = ctx.message.text;
     const user = await this.getUser(ctx);
 
-    if (text === '📅 Сегодня' || text === '/today') {
+    if (
+      text === '📅 Сегодня' ||
+      text === '/today' ||
+      text.toLowerCase() === 'сегодня'
+    ) {
       return this.handleScheduleRequest(ctx, user, 0);
     }
-    if (text === '📅 Завтра' || text === '/tomorrow') {
+    if (
+      text === '📅 Завтра' ||
+      text === '/tomorrow' ||
+      text.toLowerCase() === 'завтра'
+    ) {
       return this.handleScheduleRequest(ctx, user, 1);
     }
-    if (text === '📅 Неделя' || text === '/week') {
+    if (
+      text === '📅 Неделя' ||
+      text === '/week' ||
+      text.toLowerCase() === 'неделя'
+    ) {
       return this.handleScheduleRequest(ctx, user, 'week');
     }
 
