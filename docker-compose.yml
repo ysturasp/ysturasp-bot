@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -20,4 +18,8 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
     networks:
-      - ${NETWORK_NAME}
+      - ysturasp-svelte_default
+
+networks:
+  ysturasp-svelte_default:
+    external: true
