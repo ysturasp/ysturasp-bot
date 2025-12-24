@@ -1,19 +1,24 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @Injectable()
 export class ScheduleService {
   private readonly logger = new Logger(ScheduleService.name);
-  private readonly API_BASE = 'https://gg-api.ystuty.ru/s/schedule/v1';
+  private readonly baseUrl = 'https://gg-api.ystuty.ru/s/schedule/v1';
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {}
 
   async getGroups(): Promise<string[]> {
     try {
       const { data } = await firstValueFrom(
-        this.httpService.get<{ items: string[] }>(`${this.API_BASE}/groups`),
+        this.httpService.get<{ items: string[] }>(`${this.baseUrl}/groups`),
       );
       return data.items;
     } catch (error) {
@@ -23,11 +28,24 @@ export class ScheduleService {
   }
 
   async getSchedule(groupName: string): Promise<any> {
+    const cacheKey = `schedule:${groupName}`;
+
     try {
-      const encodedName = encodeURIComponent(groupName);
+      const cached = await this.cacheManager.get(cacheKey);
+      if (cached) {
+        this.logger.log(`Cache hit for group: ${groupName}`);
+        return cached;
+      }
+
+      this.logger.log(`Fetching schedule for group: ${groupName}`);
       const { data } = await firstValueFrom(
-        this.httpService.get(`${this.API_BASE}/schedule/group/${encodedName}`),
+        this.httpService.get(
+          `${this.baseUrl}/schedule/group/${encodeURIComponent(groupName)}`,
+        ),
       );
+
+      await this.cacheManager.set(cacheKey, data);
+
       return data;
     } catch (error) {
       if (error instanceof AxiosError && error.response?.status === 404) {

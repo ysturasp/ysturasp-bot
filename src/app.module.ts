@@ -1,17 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
+import { ScheduleModule as CronScheduleModule } from '@nestjs/schedule';
 import { TelegrafModule } from 'nestjs-telegraf';
+import { CacheModule } from '@nestjs/cache-manager';
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { User } from './database/entities/user.entity';
 import { Subscription } from './database/entities/subscription.entity';
 import { Poll } from './database/entities/poll.entity';
 import { PollAnswer } from './database/entities/poll-answer.entity';
 import { SupportRequest } from './database/entities/support-request.entity';
-import { ScheduleModule as AppScheduleModule } from './schedule/schedule.module';
+import { ScheduleModule } from './schedule/schedule.module';
+import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
@@ -19,7 +21,12 @@ import { NotificationsModule } from './notifications/notifications.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ScheduleModule.forRoot(),
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 1200000,
+      max: 100,
+    }),
+    CronScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -42,7 +49,7 @@ import { NotificationsModule } from './notifications/notifications.module';
       inject: [ConfigService],
     }),
     TelegramBotModule,
-    AppScheduleModule,
+    ScheduleModule,
     NotificationsModule,
   ],
   controllers: [AppController],
