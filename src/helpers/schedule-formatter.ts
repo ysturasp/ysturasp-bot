@@ -28,13 +28,13 @@ export function formatSchedule(
     return '❌ Расписание не найдено.';
   }
 
+  if (dayOffset === 'week') {
+    return formatWeekSchedule(schedule, groupName);
+  }
+
   const date = new Date();
   if (dayOffset === 1) {
     date.setDate(date.getDate() + 1);
-  }
-
-  if (dayOffset === 'week') {
-    return formatWeekSchedule(schedule, groupName);
   }
 
   return formatDaySchedule(schedule, date, groupName);
@@ -42,41 +42,56 @@ export function formatSchedule(
 
 function formatDaySchedule(
   schedule: any,
-  date: Date,
+  targetDate: Date,
   groupName: string,
 ): string {
-  const dayStr = date.toISOString().split('T')[0];
+  targetDate.setHours(0, 0, 0, 0);
 
-  let lessons: any[] = [];
+  const dayNames = [
+    'Воскресенье',
+    'Понедельник',
+    'Вторник',
+    'Среда',
+    'Четверг',
+    'Пятница',
+    'Суббота',
+  ];
+  const dayName = dayNames[targetDate.getDay()];
+
+  const dateStr =
+    targetDate.getDate().toString().padStart(2, '0') +
+    '.' +
+    (targetDate.getMonth() + 1).toString().padStart(2, '0') +
+    '.' +
+    targetDate.getFullYear();
+
+  let foundLessons: any[] = [];
 
   for (const week of schedule.items) {
     for (const day of week.days) {
-      if (day.info.date === dayStr) {
-        lessons = day.lessons;
+      const dayDate = new Date(day.info.date);
+      dayDate.setHours(0, 0, 0, 0);
+
+      if (dayDate.getTime() === targetDate.getTime()) {
+        foundLessons = day.lessons || [];
         break;
       }
     }
-    if (lessons.length > 0) break;
+    if (foundLessons.length > 0) break;
   }
 
-  const dateFormatted = date.toLocaleDateString('ru-RU', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-  });
-
-  let msg = `📅 Расписание на ${dateFormatted} (${groupName}):\n\n`;
-
-  if (lessons.length === 0) {
-    msg += '🎉 Пар нет! Отдыхайте.';
-    return msg;
+  if (foundLessons.length === 0) {
+    return `📅 ${dayName} (${dateStr})\n\n🎉 Занятий нет`;
   }
 
-  lessons.forEach((lesson) => {
-    msg += `🕒 ${lesson.timeRange} - ${lesson.lessonName}\n`;
+  let msg = `📅 ${dayName} (${dateStr})\n\n`;
+
+  foundLessons.forEach((lesson) => {
+    msg += `📚 ${lesson.lessonName}\n`;
     msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
-    if (lesson.auditoryName) msg += `🚪 ${lesson.auditoryName}\n`;
+    msg += `🕐 ${lesson.timeRange}\n`;
     if (lesson.teacherName) msg += `👨‍🏫 ${lesson.teacherName}\n`;
+    if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
     msg += '\n';
   });
 
@@ -84,37 +99,60 @@ function formatDaySchedule(
 }
 
 function formatWeekSchedule(schedule: any, groupName: string): string {
-  const today = new Date().toISOString().split('T')[0];
-  let currentWeek = schedule.items.find((w: any) =>
-    w.days.some((d: any) => d.info.date === today),
-  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  if (!currentWeek && schedule.items.length > 0) {
-    currentWeek = schedule.items[0];
+  const weekEnd = new Date(today);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+
+  const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  let msg = '📅 Расписание на неделю\n\n';
+
+  const daysWithLessons: Array<{ date: Date; lessons: any[] }> = [];
+
+  for (const week of schedule.items) {
+    for (const day of week.days) {
+      const dayDate = new Date(day.info.date);
+      dayDate.setHours(0, 0, 0, 0);
+
+      if (
+        dayDate >= today &&
+        dayDate < weekEnd &&
+        day.lessons &&
+        day.lessons.length > 0
+      ) {
+        daysWithLessons.push({
+          date: dayDate,
+          lessons: day.lessons,
+        });
+      }
+    }
   }
 
-  if (!currentWeek) {
-    return 'Расписание на неделю не найдено.';
+  if (daysWithLessons.length === 0) {
+    return msg + '🎉 На этой неделе занятий нет';
   }
 
-  let msg = `📅 Расписание на неделю (${groupName}):\n\n`;
+  daysWithLessons.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  for (const day of currentWeek.days) {
-    if (day.lessons.length === 0) continue;
+  daysWithLessons.forEach((day) => {
+    const dateStr =
+      day.date.getDate().toString().padStart(2, '0') +
+      '.' +
+      (day.date.getMonth() + 1).toString().padStart(2, '0');
+    const dayName = dayNames[day.date.getDay()];
 
-    const d = new Date(day.info.date);
-    const dateFormatted = d.toLocaleDateString('ru-RU', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
+    msg += `━━━ ${dayName} ${dateStr} ━━━\n\n`;
+
+    day.lessons.forEach((lesson) => {
+      msg += `📚 ${lesson.lessonName}\n`;
+      msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
+      msg += `🕐 ${lesson.timeRange}\n`;
+      if (lesson.teacherName) msg += `👨‍🏫 ${lesson.teacherName}\n`;
+      if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
+      msg += '\n';
     });
-
-    msg += `🔹 ${dateFormatted}\n`;
-    day.lessons.forEach((lesson: any) => {
-      msg += `${lesson.timeRange} ${lesson.lessonName} (${lesson.auditoryName})\n`;
-    });
-    msg += '\n';
-  }
+  });
 
   return msg;
 }

@@ -107,6 +107,127 @@ export class TelegramBotService {
     await ctx.editMessageText('✅ Подписка успешно удалена.');
   }
 
+  @Action(/^quick_sub:(.+)$/)
+  async onQuickSubscribe(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const groupName = ctx.match[1];
+    const user = await this.getUser(ctx);
+
+    user.state = 'WAITING_NOTIFY_TIME';
+    user.stateData = { pendingGroup: groupName };
+    await this.userRepository.save(user);
+
+    await ctx.answerCbQuery();
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', `back_to_group:${groupName}`)],
+    ]);
+
+    await ctx.editMessageText(
+      `✅ Группа ${groupName} выбрана!\n\nЗа сколько минут до начала пары присылать уведомление? (Напишите число, например 30)`,
+      keyboard,
+    );
+  }
+
+  @Action(/^quick_view:(.+)$/)
+  async onQuickView(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const groupName = ctx.match[1];
+
+    await ctx.answerCbQuery();
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('📅 Сегодня', `view_day:${groupName}:0`)],
+      [Markup.button.callback('📅 Завтра', `view_day:${groupName}:1`)],
+      [Markup.button.callback('📅 Неделя', `view_week:${groupName}`)],
+      [Markup.button.callback('« Назад', `back_to_group:${groupName}`)],
+    ]);
+
+    await ctx.editMessageText(
+      `📋 Расписание для группы ${groupName}:`,
+      keyboard,
+    );
+  }
+
+  @Action(/^view_day:(.+):(\d+)$/)
+  async onViewDay(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const groupName = ctx.match[1];
+    // @ts-ignore
+    const dayOffset = parseInt(ctx.match[2]);
+
+    await ctx.answerCbQuery();
+
+    const schedule = await this.scheduleService.getSchedule(groupName);
+    const message = formatSchedule(schedule, dayOffset, groupName);
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          '« Назад к выбору дня',
+          `quick_view:${groupName}`,
+        ),
+      ],
+    ]);
+
+    await ctx.editMessageText(message, keyboard);
+  }
+
+  @Action(/^view_week:(.+)$/)
+  async onViewWeek(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const groupName = ctx.match[1];
+
+    await ctx.answerCbQuery();
+
+    const schedule = await this.scheduleService.getSchedule(groupName);
+    const message = formatSchedule(schedule, 'week', groupName);
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          '« Назад к выбору дня',
+          `quick_view:${groupName}`,
+        ),
+      ],
+    ]);
+
+    await ctx.editMessageText(message, keyboard);
+  }
+
+  @Action(/^back_to_group:(.+)$/)
+  async onBackToGroup(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const groupName = ctx.match[1];
+
+    const user = await this.getUser(ctx);
+    user.state = null;
+    user.stateData = null;
+    await this.userRepository.save(user);
+
+    await ctx.answerCbQuery();
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          '🔔 Подписаться на уведомления',
+          `quick_sub:${groupName}`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '📅 Посмотреть расписание',
+          `quick_view:${groupName}`,
+        ),
+      ],
+    ]);
+
+    await ctx.editMessageText(
+      `✅ Нашёл группу <b>${groupName}</b>!\n\nЧто вы хотите сделать?`,
+      { parse_mode: 'HTML', ...keyboard },
+    );
+  }
+
   @Command('subscriptions')
   async onSubscriptions(@Ctx() ctx: Context) {
     const user = await this.getUser(ctx);
@@ -159,12 +280,14 @@ export class TelegramBotService {
       await this.userRepository.save(user);
 
       await ctx.reply(
-        `✅ Группа ${groupName} найдена!\n\nЗа сколько минут до начала занятия присылать уведомление? (Введите число, например 30)`,
+        `✅ Группа ${groupName} найдена!\n\nЗа сколько минут до начала занятия присылать уведомление? (Напишите число, например 30)`,
       );
     } else if (user.state === 'WAITING_NOTIFY_TIME') {
       const minutes = parseInt(text);
       if (isNaN(minutes) || minutes < 1) {
-        await ctx.reply('Пожалуйста, введите корректное число минут (> 0):');
+        await ctx.reply(
+          '⚠️ Пожалуйста, введите корректное число минут (больше 0):',
+        );
         return;
       }
 
@@ -174,7 +297,7 @@ export class TelegramBotService {
         user.stateData = null;
         await this.userRepository.save(user);
         await ctx.reply(
-          'Произошла ошибка (потерян контекст). Начните заново /subscribe',
+          '⚠️ Произошла ошибка (потерян контекст). Начните заново нажав /subscribe',
         );
         return;
       }
@@ -192,9 +315,45 @@ export class TelegramBotService {
       await this.userRepository.save(user);
 
       await ctx.reply(
-        `✅ Вы успешно подписались на расписание группы ${groupName}!\nУведомления за ${minutes} минут.`,
-        this.getMainKeyboard(),
+        `✅ Готово! Вы подписались на расписание группы <b>${groupName}</b>.\n⏰ Уведомления будут приходить за <b>${minutes} мин</b> до начала пары.`,
+        { parse_mode: 'HTML', ...this.getMainKeyboard() },
       );
+    } else {
+      const possibleGroup = text.trim();
+      const schedule = await this.scheduleService.getSchedule(possibleGroup);
+
+      if (schedule) {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              '🔔 Подписаться на уведомления',
+              `quick_sub:${possibleGroup}`,
+            ),
+          ],
+          [
+            Markup.button.callback(
+              '📅 Посмотреть расписание',
+              `quick_view:${possibleGroup}`,
+            ),
+          ],
+        ]);
+
+        await ctx.reply(
+          `✅ Нашёл группу <b>${possibleGroup}</b>!\n\nЧто вы хотите сделать?`,
+          { parse_mode: 'HTML', ...keyboard },
+        );
+      } else {
+        const helpMsg = `Не удалось распознать команду или группу 🤔
+
+Попробуйте:
+• Введите название группы (например, ЦИС-33)
+• Используйте кнопки внизу для расписания
+• /subscribe — подписаться на уведомления
+
+Есть вопрос? Напишите /support`;
+
+        await ctx.reply(helpMsg, this.getMainKeyboard());
+      }
     }
   }
 

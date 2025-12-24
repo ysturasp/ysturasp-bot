@@ -83,10 +83,10 @@ export class NotificationsService {
   private async sendNotification(sub: Subscription, lesson: any) {
     const message = `🔔 Напоминание!
     
-🕒 Через ${sub.notifyMinutes} минут (${lesson.timeRange})
+🕐 Через ${sub.notifyMinutes} минут (${lesson.timeRange})
 📚 ${lesson.lessonName}
 📝 ${getLessonTypeName(lesson.type)}
-${lesson.auditoryName ? `🚪 ${lesson.auditoryName}` : ''}
+${lesson.auditoryName ? `🏛 ${lesson.auditoryName}` : ''}
 ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`;
 
     try {
