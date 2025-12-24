@@ -125,6 +125,16 @@ export class TelegramBotService {
     const groupName = ctx.match[1];
     const user = await this.getUser(ctx);
 
+    const existing = await this.subscriptionRepository.findOne({
+      where: { user: { id: user.id }, groupName },
+    });
+    if (existing) {
+      await ctx.answerCbQuery('Вы уже подписаны на эту группу!', {
+        show_alert: true,
+      });
+      return;
+    }
+
     user.state = 'WAITING_NOTIFY_TIME';
     user.stateData = { pendingGroup: groupName };
     await this.userRepository.save(user);
@@ -240,6 +250,18 @@ export class TelegramBotService {
     );
   }
 
+  @Action('back_to_subscribe')
+  async onBackToSubscribe(@Ctx() ctx: Context) {
+    const user = await this.getUser(ctx);
+    user.state = 'WAITING_GROUP_SUBSCRIBE';
+    user.stateData = null;
+    await this.userRepository.save(user);
+
+    await ctx.answerCbQuery();
+
+    await ctx.editMessageText('Введите название группы (например, ЦИС-33):');
+  }
+
   @Command('subscriptions')
   async onSubscriptions(@Ctx() ctx: Context) {
     const user = await this.getUser(ctx);
@@ -299,6 +321,28 @@ export class TelegramBotService {
         return;
       }
 
+      const existing = await this.subscriptionRepository.findOne({
+        where: { user: { id: user.id }, groupName },
+      });
+      if (existing) {
+        user.state = null;
+        user.stateData = null;
+        await this.userRepository.save(user);
+        await ctx.reply(`⚠️ Вы уже подписаны на группу <b>${groupName}</b>.`, {
+          parse_mode: 'HTML',
+          ...this.getMainKeyboard(),
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                'Выбрать другую группу',
+                'back_to_subscribe',
+              ),
+            ],
+          ]),
+        });
+        return;
+      }
+
       user.state = 'WAITING_NOTIFY_TIME';
       user.stateData = { pendingGroup: groupName };
       await this.userRepository.save(user);
@@ -323,6 +367,28 @@ export class TelegramBotService {
         await ctx.reply(
           '⚠️ Произошла ошибка (потерян контекст). Начните заново нажав /subscribe',
         );
+        return;
+      }
+
+      const existing = await this.subscriptionRepository.findOne({
+        where: { user: { id: user.id }, groupName },
+      });
+      if (existing) {
+        user.state = null;
+        user.stateData = null;
+        await this.userRepository.save(user);
+        await ctx.reply(`⚠️ Вы уже подписаны на группу <b>${groupName}</b>.`, {
+          parse_mode: 'HTML',
+          ...this.getMainKeyboard(),
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                'Выбрать другую группу',
+                'back_to_subscribe',
+              ),
+            ],
+          ]),
+        });
         return;
       }
 
