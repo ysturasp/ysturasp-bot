@@ -8,6 +8,14 @@ import { Exam } from '../database/entities/exam.entity';
 import { Poll } from '../database/entities/poll.entity';
 import { PollAnswer } from '../database/entities/poll-answer.entity';
 import { SupportRequest } from '../database/entities/support-request.entity';
+import { SupportService } from './services/support.service';
+import { PollService } from './services/poll.service';
+import { BroadcastService } from './services/broadcast.service';
+import { NotificationTestService } from './services/notification-test.service';
+import { SubscriptionService } from './services/subscription.service';
+import { ScheduleCommandService } from './services/schedule-command.service';
+import { UserHelperService } from './services/user-helper.service';
+import { TextHandlerService } from './services/text-handler.service';
 
 @Module({
   imports: [
@@ -21,7 +29,17 @@ import { SupportRequest } from '../database/entities/support-request.entity';
     ]),
     ScheduleModule,
   ],
-  providers: [TelegramBotService],
+  providers: [
+    TelegramBotService,
+    SupportService,
+    PollService,
+    BroadcastService,
+    NotificationTestService,
+    SubscriptionService,
+    ScheduleCommandService,
+    UserHelperService,
+    TextHandlerService,
+  ],
   exports: [TelegramBotService],
 })
 export class TelegramBotModule {}

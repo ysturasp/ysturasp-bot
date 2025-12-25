@@ -154,7 +154,7 @@ export class ExamNotificationsService {
     };
 
     const lines = [
-      '✏️ <b>Изменение экзамена</b>',
+      '✏️ <b>Изменение экзамена</b>\n',
       '',
       diffLine('📚', prev.lessonName, exam.lessonName),
       diffLine(
