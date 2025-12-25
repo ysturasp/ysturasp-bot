@@ -34,29 +34,13 @@ export class TelegramBotService {
   @Command('exams')
   async onExams(@Ctx() ctx: Context) {
     const user = await this.getUser(ctx);
-    const sub = await this.subscriptionRepository.findOne({
+    const subs = await this.subscriptionRepository.find({
       where: { user: { id: user.id } },
-      order: { id: 'DESC' },
     });
-    if (!sub) {
+    if (!subs.length) {
       await ctx.reply(
         '❌ У вас нет активных подписок. Используйте /subscribe чтобы добавить группу.',
       );
-      return;
-    }
-
-    const normalizedGroupName = sub.groupName.trim().toLowerCase();
-
-    const exams = await this.examRepository
-      .createQueryBuilder('exam')
-      .where('LOWER(exam.groupName) = :groupName', {
-        groupName: normalizedGroupName,
-      })
-      .orderBy('exam.date', 'ASC')
-      .getMany();
-
-    if (!exams.length) {
-      await ctx.reply('Экзамены для вашей группы не найдены.');
       return;
     }
 
@@ -68,11 +52,33 @@ export class TelegramBotService {
       });
     };
 
-    let msg = `🎓 <b>Экзамены для группы ${sub.groupName}</b>\n\n`;
-    for (const exam of exams) {
-      msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}\n`;
+    let foundAny = false;
+    let msg = '';
+    for (const sub of subs) {
+      const normalizedGroupName = sub.groupName.trim().toLowerCase();
+      const exams = await this.examRepository
+        .createQueryBuilder('exam')
+        .where('LOWER(exam.groupName) = :groupName', {
+          groupName: normalizedGroupName,
+        })
+        .orderBy('exam.date', 'ASC')
+        .getMany();
+
+      if (!exams.length) {
+        continue;
+      }
+      foundAny = true;
+      msg += `🎓 <b>Экзамены для группы ${sub.groupName}</b>\n\n`;
+      for (const exam of exams) {
+        msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}\n`;
+      }
+      msg += '\n';
     }
-    await ctx.reply(msg, { parse_mode: 'HTML' });
+    if (foundAny) {
+      await ctx.reply(msg.trim(), { parse_mode: 'HTML' });
+    } else {
+      await ctx.reply('Экзамены для ваших групп не найдены.');
+    }
   }
 
   @Start()

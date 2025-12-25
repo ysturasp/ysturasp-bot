@@ -22,7 +22,7 @@ export class ExamNotificationsService {
     @InjectBot() private readonly bot: Telegraf,
   ) {}
 
-  @Cron('*/5 * * * *')
+  @Cron('*/1 * * * *')
   async checkExams() {
     this.logger.debug('Checking for exam notifications...');
     const subs = await this.subscriptionRepository.find({
@@ -54,22 +54,25 @@ export class ExamNotificationsService {
     const exams = this.extractExams(schedule);
     for (const exam of exams) {
       const existing = await this.examRepository.findOne({
-        where: { groupName, lessonName: exam.lessonName, date: exam.date },
+        where: { groupName, lessonName: exam.lessonName },
       });
       if (!existing) {
         const saved = await this.examRepository.save({ ...exam, groupName });
         await this.notifySubscribers(groupSubs, saved, 'new');
-      } else if (
-        existing.teacherName !== exam.teacherName ||
-        existing.auditoryName !== exam.auditoryName ||
-        existing.timeRange !== exam.timeRange
-      ) {
-        await this.examRepository.update(existing.id, exam);
-        await this.notifySubscribers(
-          groupSubs,
-          { ...existing, ...exam },
-          'changed',
-        );
+      } else {
+        if (
+          existing.date !== exam.date ||
+          existing.teacherName !== exam.teacherName ||
+          existing.auditoryName !== exam.auditoryName ||
+          existing.timeRange !== exam.timeRange
+        ) {
+          await this.examRepository.update(existing.id, exam);
+          await this.notifySubscribers(
+            groupSubs,
+            { ...existing, ...exam, prev: existing },
+            'changed',
+          );
+        }
       }
     }
   }
@@ -98,7 +101,7 @@ export class ExamNotificationsService {
 
   private async notifySubscribers(
     subs: Subscription[],
-    exam: Exam,
+    exam: Exam & { prev?: Partial<Exam> },
     mode: 'new' | 'changed',
   ) {
     const msg =
@@ -128,8 +131,11 @@ export class ExamNotificationsService {
     return `🎓 <b>Добавлен новый экзамен</b>\n\n📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
   }
 
-  private buildExamChangedMessage(exam: Exam): string {
+  private buildExamChangedMessage(
+    exam: Exam & { prev?: Partial<Exam> },
+  ): string {
     const formatDate = (isoDate: string): string => {
+      if (!isoDate) return '';
       const date = new Date(isoDate);
       return date.toLocaleDateString('ru-RU', {
         day: 'numeric',
@@ -137,6 +143,29 @@ export class ExamNotificationsService {
       });
     };
 
-    return `✏️ <b>Изменение экзамена</b>\n\n📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
+    const prev = exam.prev || {};
+    const diffLine = (label: string, prevVal?: string, newVal?: string) => {
+      if (prevVal && newVal && prevVal !== newVal) {
+        return `${label} <s>${prevVal}</s> → ${newVal}`;
+      } else if (newVal) {
+        return `${label} ${newVal}`;
+      }
+      return '';
+    };
+
+    const lines = [
+      '✏️ <b>Изменение экзамена</b>',
+      '',
+      diffLine('📚', prev.lessonName, exam.lessonName),
+      diffLine(
+        '🕐',
+        prev.date ? formatDate(prev.date) : undefined,
+        formatDate(exam.date),
+      ),
+      diffLine('👨‍🏫', prev.teacherName, exam.teacherName),
+      diffLine('🏛', prev.auditoryName, exam.auditoryName),
+      diffLine('⏰', prev.timeRange, exam.timeRange),
+    ].filter(Boolean);
+    return lines.join('\n');
   }
 }
