@@ -31,7 +31,7 @@ export class SubscriptionService {
     });
 
     if (subs.length === 0) {
-      await ctx.reply('У вас нет активных подписок.');
+      await ctx.editMessageText?.('У вас нет активных подписок.');
       return;
     }
 
@@ -61,12 +61,65 @@ export class SubscriptionService {
       return;
     }
 
-    let msg = '📋 Ваши подписки:\n\n';
+    let msg = '⚙️ Ваши подписки:\n\n';
     subs.forEach((sub) => {
-      msg += `🎓 Группа: ${sub.groupName}\n⏰ Уведомление: за ${sub.notifyMinutes} мин\n\n`;
+      msg += `👨‍💻 Группа: ${sub.groupName}\n⏰ За ${sub.notifyMinutes} минут\n\n`;
     });
 
-    await ctx.reply(msg);
+    const inlineKb = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Подписаться', 'open_subscribe'),
+        Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
+      ],
+    ]);
+
+    if (
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery
+    ) {
+      await ctx.answerCbQuery();
+      await ctx.editMessageText?.(msg, inlineKb as any);
+      return;
+    }
+
+    await ctx.reply(msg, { ...getMainKeyboard(), ...inlineKb });
+  }
+
+  async handleUnsubscribeFromSettings(ctx: Context, user: User): Promise<void> {
+    const subs = await this.subscriptionRepository.find({
+      where: { user: { id: user.id } },
+    });
+
+    if (subs.length === 0) {
+      await ctx.reply('У вас нет активных подписок.');
+      return;
+    }
+
+    const buttons = subs.map((sub) => [
+      Markup.button.callback(`❌ ${sub.groupName}`, `unsubscribe:${sub.id}`),
+    ]);
+
+    const rows: any[] = [];
+    rows.push(...buttons);
+    rows.push([Markup.button.callback('« Назад', 'back_to_subscriptions')]);
+
+    const keyboard = Markup.inlineKeyboard(rows);
+
+    await ctx.editMessageText?.('Выберите подписку для удаления:', keyboard);
+  }
+
+  async handleSubscribeFromSettings(ctx: Context, user: User): Promise<void> {
+    user.state = 'WAITING_GROUP_SUBSCRIBE';
+    await this.userRepository.save(user);
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_to_subscriptions')],
+    ]);
+
+    await ctx.editMessageText?.(
+      'Введите название группы (например, ЦИС-33):',
+      keyboard,
+    );
   }
 
   async handleQuickSubscribe(

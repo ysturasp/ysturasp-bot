@@ -148,6 +148,34 @@ export class TelegramBotService {
     await this.subscriptionService.handleBackToSubscribe(ctx, user);
   }
 
+  @Action('manage_subs')
+  async onManageSubs(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    await this.subscriptionService.handleSubscriptions(ctx, user);
+  }
+
+  @Action('open_unsubscribe')
+  async onOpenUnsubscribe(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    await this.subscriptionService.handleUnsubscribeFromSettings(ctx, user);
+  }
+
+  @Action('open_subscribe')
+  async onOpenSubscribe(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    await this.subscriptionService.handleSubscribeFromSettings(ctx, user);
+  }
+
+  @Action('back_to_subscriptions')
+  async onBackToSubscriptions(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    await this.subscriptionService.handleSubscriptions(ctx, user);
+  }
+
   @Command('subscriptions')
   async onSubscriptions(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);

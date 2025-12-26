@@ -49,6 +49,15 @@ export class TextHandlerService {
       return true;
     }
 
+    if (
+      text === '⚙️ Настройки' ||
+      text === '/settings' ||
+      text.toLowerCase() === 'настройки'
+    ) {
+      await this.subscriptionService.handleSubscriptions(ctx, user);
+      return true;
+    }
+
     if (user.state === 'WAITING_GROUP_SUBSCRIBE') {
       const groupName = text.trim();
       return await this.subscriptionService.handleWaitingGroupSubscribe(
