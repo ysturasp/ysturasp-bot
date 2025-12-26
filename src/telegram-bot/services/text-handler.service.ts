@@ -50,6 +50,15 @@ export class TextHandlerService {
     }
 
     if (
+      text === '📝 Экзамены' ||
+      text === '/exams' ||
+      text.toLowerCase() === 'экзамены'
+    ) {
+      await this.scheduleCommandService.handleExams(ctx, user.id);
+      return true;
+    }
+
+    if (
       text === '⚙️ Настройки' ||
       text === '/settings' ||
       text.toLowerCase() === 'настройки'
