@@ -70,8 +70,8 @@ export class SubscriptionService {
       [
         Markup.button.callback('➕ Подписаться', 'open_subscribe'),
         Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
-        Markup.button.callback('⭐ Выбрать группу', 'open_set_default'),
       ],
+      [Markup.button.callback('⭐ Выбрать группу', 'open_set_default')],
     ]);
 
     if (
