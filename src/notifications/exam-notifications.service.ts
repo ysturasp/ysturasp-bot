@@ -31,6 +31,7 @@ export class ExamNotificationsService {
     });
     if (subs.length === 0) return;
     const groups = [...new Set(subs.map((s) => s.groupName))];
+    const sentNotifications = new Set<string>();
     for (const groupName of groups) {
       try {
         const schedule = await this.scheduleService.getSchedule(groupName);
@@ -40,6 +41,7 @@ export class ExamNotificationsService {
           schedule,
           subs.filter((s) => s.groupName === groupName),
         );
+          sentNotifications,
       } catch (e) {
         this.logger.error(`Error processing group ${groupName}`, e);
       }
@@ -50,6 +52,7 @@ export class ExamNotificationsService {
     groupName: string,
     schedule: any,
     groupSubs: Subscription[],
+      sentNotifications: Set<string>,
   ) {
     const exams = this.extractExams(schedule);
     for (const exam of exams) {
@@ -58,7 +61,10 @@ export class ExamNotificationsService {
       });
       if (!existing) {
         const saved = await this.examRepository.save({ ...exam, groupName });
-        await this.notifySubscribers(groupSubs, saved, 'new');
+          const key = `${groupName}|${saved.lessonName}|new`;
+          if (!sentNotifications.has(key)) {
+            sentNotifications.add(key);
+            await this.notifySubscribers(groupSubs, saved, 'new', sentNotifications);
       } else {
         if (
           existing.date !== exam.date ||
@@ -67,11 +73,13 @@ export class ExamNotificationsService {
           existing.timeRange !== exam.timeRange
         ) {
           await this.examRepository.update(existing.id, exam);
-          await this.notifySubscribers(
-            groupSubs,
-            { ...existing, ...exam, prev: existing },
-            'changed',
-          );
+            const payload = { ...existing, ...exam, prev: existing } as Exam & {
+              prev?: Partial<Exam>;
+            };
+            const key = `${groupName}|${payload.lessonName}|changed`;
+            if (!sentNotifications.has(key)) {
+              sentNotifications.add(key);
+              await this.notifySubscribers(groupSubs, payload, 'changed', sentNotifications);
         }
       }
     }
@@ -103,18 +111,23 @@ export class ExamNotificationsService {
     subs: Subscription[],
     exam: Exam & { prev?: Partial<Exam> },
     mode: 'new' | 'changed',
+      _sentNotifications?: Set<string>,
   ) {
     const msg =
       mode === 'new'
         ? this.buildExamNewMessage(exam)
         : this.buildExamChangedMessage(exam);
+    const sent = new Set<string>();
     for (const sub of subs) {
+      const chatId = String(sub.user?.chatId || sub.user?.chatId);
+      if (sent.has(chatId)) continue;
+      sent.add(chatId);
       try {
-        await this.bot.telegram.sendMessage(sub.user.chatId, msg, {
+        await this.bot.telegram.sendMessage(chatId, msg, {
           parse_mode: 'HTML',
         });
       } catch (e) {
-        this.logger.error(`Failed to send exam notification to ${sub.id}`, e);
+        this.logger.error(`Failed to send exam notification to ${chatId}`, e);
       }
     }
   }
