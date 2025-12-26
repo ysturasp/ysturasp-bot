@@ -40,8 +40,8 @@ export class ExamNotificationsService {
           groupName,
           schedule,
           subs.filter((s) => s.groupName === groupName),
-        );
           sentNotifications,
+        );
       } catch (e) {
         this.logger.error(`Error processing group ${groupName}`, e);
       }
@@ -52,19 +52,21 @@ export class ExamNotificationsService {
     groupName: string,
     schedule: any,
     groupSubs: Subscription[],
-      sentNotifications: Set<string>,
+    sentNotifications: Set<string>,
   ) {
     const exams = this.extractExams(schedule);
     for (const exam of exams) {
       const existing = await this.examRepository.findOne({
         where: { groupName, lessonName: exam.lessonName },
       });
+
       if (!existing) {
         const saved = await this.examRepository.save({ ...exam, groupName });
-          const key = `${groupName}|${saved.lessonName}|new`;
-          if (!sentNotifications.has(key)) {
-            sentNotifications.add(key);
-            await this.notifySubscribers(groupSubs, saved, 'new', sentNotifications);
+        const key = `${groupName}|${saved.lessonName}|new`;
+        if (!sentNotifications.has(key)) {
+          sentNotifications.add(key);
+          await this.notifySubscribers(groupSubs, saved, 'new');
+        }
       } else {
         if (
           existing.date !== exam.date ||
@@ -73,13 +75,14 @@ export class ExamNotificationsService {
           existing.timeRange !== exam.timeRange
         ) {
           await this.examRepository.update(existing.id, exam);
-            const payload = { ...existing, ...exam, prev: existing } as Exam & {
-              prev?: Partial<Exam>;
-            };
-            const key = `${groupName}|${payload.lessonName}|changed`;
-            if (!sentNotifications.has(key)) {
-              sentNotifications.add(key);
-              await this.notifySubscribers(groupSubs, payload, 'changed', sentNotifications);
+          const payload = { ...existing, ...exam, prev: existing } as Exam & {
+            prev?: Partial<Exam>;
+          };
+          const key = `${groupName}|${payload.lessonName}|changed`;
+          if (!sentNotifications.has(key)) {
+            sentNotifications.add(key);
+            await this.notifySubscribers(groupSubs, payload, 'changed');
+          }
         }
       }
     }
@@ -111,7 +114,6 @@ export class ExamNotificationsService {
     subs: Subscription[],
     exam: Exam & { prev?: Partial<Exam> },
     mode: 'new' | 'changed',
-      _sentNotifications?: Set<string>,
   ) {
     const msg =
       mode === 'new'
