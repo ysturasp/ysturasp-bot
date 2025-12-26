@@ -133,6 +133,20 @@ export class SupportService {
         await this.supportRequestRepository.save(request);
       }
 
+      try {
+        const adminChatId = String(ctx.chat.id);
+        const adminUser = await this.userRepository.findOne({
+          where: { chatId: adminChatId },
+        });
+        if (adminUser) {
+          adminUser.state = null;
+          adminUser.stateData = null;
+          await this.userRepository.save(adminUser);
+        }
+      } catch (e) {
+        this.logger.debug('Failed to clear admin state after reply');
+      }
+
       await ctx.reply('Ответ отправлен!');
     } catch (e) {
       await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
@@ -148,6 +162,15 @@ export class SupportService {
     user.state = 'ADMIN_REPLY_PHOTO';
     user.stateData = { targetChatId, replyText };
     await ctx.reply('Теперь отправьте фото для ответа');
+  }
+
+  async prepareAdminReply(ctx: Context, user: User, targetChatId: string) {
+    user.state = 'ADMIN_REPLY';
+    user.stateData = { targetChatId };
+    await this.userRepository.save(user);
+    await ctx.reply(
+      `Отвечаете пользователю (chatId: ${targetChatId}). Введите текст ответа:`,
+    );
   }
 
   async handleReplyPhoto(ctx: Context, user: User, fileId: string) {

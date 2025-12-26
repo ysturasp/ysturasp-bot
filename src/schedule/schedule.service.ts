@@ -25,7 +25,9 @@ export class ScheduleService {
   async getGroups(): Promise<string[]> {
     try {
       const { data } = await firstValueFrom(
-        this.httpService.get<{ items: string[] }>(`${this.baseUrl}/groups`),
+        this.httpService.get<{ items: string[] }>(
+          `${this.baseUrl}/schedule/actual_groups`,
+        ),
       );
       return data.items;
     } catch (error) {

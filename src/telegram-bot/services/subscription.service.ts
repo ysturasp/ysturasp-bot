@@ -214,9 +214,6 @@ export class SubscriptionService {
     const schedule = await this.scheduleService.getSchedule(groupName);
 
     if (!schedule) {
-      await ctx.reply(
-        `❌ Группа "${groupName}" не найдена. Попробуйте еще раз (например, ЦИС-33):`,
-      );
       return false;
     }
 

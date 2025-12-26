@@ -191,6 +191,15 @@ export class TelegramBotService {
     await this.subscriptionService.handleSubscriptions(ctx, user);
   }
 
+  @Action(/^admin_reply:(.+)$/)
+  async onAdminReply(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const targetChatId = ctx.match[1];
+    const admin = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    await this.supportService.prepareAdminReply(ctx, admin, targetChatId);
+  }
+
   @Command('subscriptions')
   async onSubscriptions(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
@@ -319,8 +328,70 @@ export class TelegramBotService {
     const text = ctx.message.text;
     const user = await this.userHelperService.getUser(ctx);
 
+    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
+      try {
+        const admins = await this.userRepository.find({
+          where: { isAdmin: true },
+        });
+        const fromName =
+          ctx.from?.first_name || ctx.from?.username || 'Unknown';
+        const username = ctx.from?.username
+          ? `@${ctx.from.username}`
+          : 'нет username';
+        const info = `Сообщение от ${fromName} (${username}; chatId: ${user.chatId}):\n${text}`;
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
+        ]);
+        for (const admin of admins) {
+          try {
+            await ctx.telegram.sendMessage(admin.chatId, info, kb as any);
+          } catch (e) {
+            this.logger.debug(
+              `Failed forwarding message to admin ${admin.chatId}`,
+            );
+          }
+        }
+      } catch (e) {
+        this.logger.error('Error while forwarding message to admins', e);
+      }
+    }
+
+    const allowedCommands = [
+      '📅 Сегодня',
+      '/today',
+      'сегодня',
+      '📅 Завтра',
+      '/tomorrow',
+      'завтра',
+      '📅 Неделя',
+      '/week',
+      'неделя',
+      '📝 Экзамены',
+      '/exams',
+      'экзамены',
+      '⚙️ Настройки',
+      '/settings',
+      'настройки',
+    ];
+    const isAllowedCommand = allowedCommands.includes(text.trim());
+    if (ctx.chat?.type !== 'private' && !user?.state && !isAllowedCommand) {
+      return;
+    }
+
     const handled = await this.textHandlerService.handleText(ctx, user, text);
     if (!handled) {
+      if (user && user.isAdmin) {
+        const fromName =
+          ctx.from?.first_name || ctx.from?.username || 'Unknown';
+        const username = ctx.from?.username
+          ? `@${ctx.from.username}`
+          : 'нет username';
+        const info = `Сообщение (нераспознано) от ${fromName} (${username}; chatId: ${user.chatId}):\n${text}`;
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
+        ]);
+        await ctx.telegram.sendMessage(user.chatId, info, kb as any);
+      }
       await ctx.reply(
         this.textHandlerService.getHelpMessage(),
         getMainKeyboard(),
@@ -335,6 +406,34 @@ export class TelegramBotService {
     const photo = message.photo[message.photo.length - 1];
     const fileId = photo.file_id;
     const caption = message.caption || '';
+
+    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
+      try {
+        const admins = await this.userRepository.find({
+          where: { isAdmin: true },
+        });
+        const fromName =
+          ctx.from?.first_name || ctx.from?.username || 'Unknown';
+        const username = ctx.from?.username
+          ? `@${ctx.from.username}`
+          : 'нет username';
+        const info = `Фотография от ${fromName} (${username}; chatId: ${user.chatId})\nfile_id: ${fileId}\ncaption: ${caption}`;
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
+        ]);
+        for (const admin of admins) {
+          try {
+            await ctx.telegram.sendMessage(admin.chatId, info, kb as any);
+          } catch (e) {
+            this.logger.debug(
+              `Failed forwarding photo to admin ${admin.chatId}`,
+            );
+          }
+        }
+      } catch (e) {
+        this.logger.error('Error while forwarding photo to admins', e);
+      }
+    }
 
     if (user.state === 'POLL_IMAGE' && user.isAdmin) {
       await this.pollService.handlePollPhoto(ctx, user, fileId);

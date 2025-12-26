@@ -69,11 +69,19 @@ export class TextHandlerService {
 
     if (user.state === 'WAITING_GROUP_SUBSCRIBE') {
       const groupName = text.trim();
-      return await this.subscriptionService.handleWaitingGroupSubscribe(
+      const result = await this.subscriptionService.handleWaitingGroupSubscribe(
         ctx,
         user,
         groupName,
       );
+      if (!result) {
+        await ctx.reply(
+          `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
+          { parse_mode: 'HTML' },
+        );
+        return true;
+      }
+      return true;
     }
 
     if (user.state === 'WAITING_NOTIFY_TIME') {
@@ -87,6 +95,17 @@ export class TextHandlerService {
 
     if (user.state === 'SUPPORT' || user.state === 'SUGGESTION') {
       await this.supportService.handleSupportText(ctx, user, text);
+      return true;
+    }
+
+    if (user.state === 'ADMIN_REPLY' && user.isAdmin) {
+      const target = user.stateData?.targetChatId;
+      if (!target) {
+        user.state = null;
+        user.stateData = null;
+        return false;
+      }
+      await this.supportService.handleReplyCommand(ctx, target, text);
       return true;
     }
 
