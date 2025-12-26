@@ -54,9 +54,17 @@ export class SupportService {
       `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
     const username = user.username ? `@${user.username}` : 'нет username';
 
+    const kb = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Ответить', callback_data: `admin_reply:${user.chatId}` }],
+        ],
+      },
+    };
     await ctx.telegram.sendMessage(
       adminChatId,
-      `📩 Новая ${type} от ${name} (${username}):\n${text}\n\nОтветьте командой:\n/reply ${user.chatId} ваш_ответ`,
+      `📩 Новая ${type} от ${name} (${username}):\n${text}`,
+      kb as any,
     );
 
     user.state = null;
@@ -93,13 +101,17 @@ export class SupportService {
       `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
     const username = user.username ? `@${user.username}` : 'нет username';
 
+    const kb = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Ответить', callback_data: `admin_reply:${user.chatId}` }],
+        ],
+      },
+    };
     await ctx.telegram.sendPhoto(adminChatId, fileId, {
       caption: `📩 Новая ${type} от ${name} (${username})\nТекст: ${caption}`,
+      ...kb,
     });
-    await ctx.telegram.sendMessage(
-      adminChatId,
-      `\nОтветьте командой:\n/reply ${user.chatId} ваш_ответ`,
-    );
 
     user.state = null;
     await this.userRepository.save(user);
