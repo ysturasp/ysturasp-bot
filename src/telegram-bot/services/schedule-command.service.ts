@@ -17,6 +17,8 @@ export class ScheduleCommandService {
     private readonly subscriptionRepository: Repository<Subscription>,
     @InjectRepository(Exam)
     private readonly examRepository: Repository<Exam>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly scheduleService: ScheduleService,
   ) {}
 
@@ -159,19 +161,30 @@ export class ScheduleCommandService {
     userId: number,
     dayOffset: number | 'week',
   ): Promise<void> {
-    const sub = await this.subscriptionRepository.findOne({
-      where: { user: { id: userId } },
-      order: { id: 'DESC' },
-    });
-    if (!sub) {
-      await ctx.reply(
-        '❌ У вас нет активных подписок. Используйте /subscribe чтобы добавить группу.',
-      );
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      await ctx.reply('❌ Пользователь не найден.');
       return;
     }
 
-    const schedule = await this.scheduleService.getSchedule(sub.groupName);
-    const message = formatSchedule(schedule, dayOffset, sub.groupName);
+    let groupName: string | undefined = user.preferredGroup;
+
+    if (!groupName) {
+      const sub = await this.subscriptionRepository.findOne({
+        where: { user: { id: userId } },
+        order: { id: 'DESC' },
+      });
+      if (!sub) {
+        await ctx.reply(
+          '❌ У вас нет активных подписок. Используйте /subscribe чтобы добавить группу.',
+        );
+        return;
+      }
+      groupName = sub.groupName;
+    }
+
+    const schedule = await this.scheduleService.getSchedule(groupName);
+    const message = formatSchedule(schedule, dayOffset, groupName);
     await ctx.reply(message);
   }
 }

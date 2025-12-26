@@ -169,6 +169,21 @@ export class TelegramBotService {
     await this.subscriptionService.handleSubscribeFromSettings(ctx, user);
   }
 
+  @Action('open_set_default')
+  async onOpenSetDefault(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    await this.subscriptionService.handleOpenSetDefault(ctx, user);
+  }
+
+  @Action(/^set_default:(\d+)$/)
+  async onSetDefault(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const subId = parseInt(ctx.match[1]);
+    const user = await this.userHelperService.getUser(ctx);
+    await this.subscriptionService.handleSetDefault(ctx, user, subId);
+  }
+
   @Action('back_to_subscriptions')
   async onBackToSubscriptions(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);

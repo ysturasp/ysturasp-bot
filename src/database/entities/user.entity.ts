@@ -28,6 +28,9 @@ export class User {
   @Column({ nullable: true })
   state: string;
 
+  @Column({ nullable: true })
+  preferredGroup: string;
+
   @Column('jsonb', { nullable: true })
   stateData: Record<string, any>;
 
