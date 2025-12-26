@@ -128,7 +128,7 @@ export class ExamNotificationsService {
       });
     };
 
-    return `🎓 <b>Добавлен новый экзамен</b>\n\n📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
+    return `🎓 <b>Добавлен новый экзамен</b> (${exam.groupName})\n\n📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
   }
 
   private buildExamChangedMessage(
@@ -154,7 +154,7 @@ export class ExamNotificationsService {
     };
 
     const lines = [
-      '✏️ <b>Изменение экзамена</b>\n',
+      `✏️ <b>Изменение экзамена</b> (${exam.groupName})\n`,
       '',
       diffLine('📚', prev.lessonName, exam.lessonName),
       diffLine(
