@@ -64,8 +64,12 @@ export class ScheduleService {
         }
       }
 
+      const token = this.configService.get<string>('ACCESS_TOKEN');
       const { data } = await firstValueFrom(
-        this.httpService.get<any>(`${this.baseUrl}/schedule/actual_groups`),
+        this.httpService.get<any>(
+          `${this.baseUrl}/schedule/actual_groups`,
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+        ),
       );
 
       const rawItems = data.items || [];
@@ -123,11 +127,15 @@ export class ScheduleService {
               this.logger.log(
                 `Fetching schedule for group: ${groupName} (attempt ${attempt + 1})`,
               );
+              const token = this.configService.get<string>('ACCESS_TOKEN');
               const { data } = await firstValueFrom(
                 this.httpService.get(
                   `${this.baseUrl}/schedule/group/${encodeURIComponent(
                     groupName,
                   )}`,
+                  token
+                    ? { headers: { Authorization: `Bearer ${token}` } }
+                    : undefined,
                 ),
               );
 

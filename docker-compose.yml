@@ -19,6 +19,7 @@ services:
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
+      - ACCESS_TOKEN=${ACCESS_TOKEN}
     networks:
       - ysturasp-svelte_default
 
