@@ -492,6 +492,7 @@ export class TelegramBotService {
 
     const handled = await this.textHandlerService.handleText(ctx, user, text);
     if (!handled) {
+      if (ctx.chat?.type !== 'private') return;
       if (user && user.isAdmin) {
         const fromName =
           ctx.from?.first_name || ctx.from?.username || 'Unknown';

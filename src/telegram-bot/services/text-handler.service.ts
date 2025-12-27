@@ -20,6 +20,9 @@ export class TextHandlerService {
   ) {}
 
   async handleText(ctx: Context, user: User, text: string): Promise<boolean> {
+    const chatType =
+      (ctx.chat && (ctx.chat as any).type) ||
+      ((ctx.message as any)?.chat && (ctx.message as any).chat.type);
     if (
       text === '📅 Сегодня' ||
       text === '/today' ||
@@ -68,6 +71,7 @@ export class TextHandlerService {
     }
 
     if (user.state === 'WAITING_GROUP_SUBSCRIBE') {
+      if (chatType !== 'private') return false;
       const groupName = text.trim();
       const result = await this.subscriptionService.handleWaitingGroupSubscribe(
         ctx,
@@ -130,6 +134,7 @@ export class TextHandlerService {
     }
 
     const possibleGroup = text.trim();
+
     const groups = await this.scheduleService.getGroups();
     const normalized = possibleGroup.toLowerCase();
     const exists = (groups || []).some(
