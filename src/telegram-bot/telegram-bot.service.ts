@@ -52,12 +52,17 @@ export class TelegramBotService {
     dbUser.stateData = { backTarget: 'main' };
     await this.userRepository.save(dbUser);
 
-    let message = `👋 Привет, ${user.first_name}! Я бот для расписания занятий.\n\nВот что я умею:`;
+    let message = `👋 Привет, ${user.first_name}! это ysturasp бот`;
 
     const mainButtons = [
-      [Markup.button.callback('📩 Отправить проблему', 'open_support')],
-      [Markup.button.callback('💡 Предложить идею', 'open_suggestion')],
-      [Markup.button.callback('⭐ Поддержать звездами', 'open_support_stars')],
+      [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
+      [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
+      [
+        Markup.button.callback(
+          '⭐ Поддержать звездами',
+          'open_support_stars:main',
+        ),
+      ],
       [
         Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
         Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
@@ -180,6 +185,56 @@ export class TelegramBotService {
     await this.subscriptionService.handleSubscribeFromSettings(ctx, user);
   }
 
+  @Action(/^open_support(?::(.+))?$/)
+  async onOpenSupport(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const source = ctx.match?.[1];
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    if (source === 'settings') {
+      user.stateData = { backTarget: 'settings' };
+      await this.userRepository.save(user);
+    } else if (source === 'main') {
+      user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    }
+    await this.supportService.handleSupportCommand(ctx, user);
+    await this.userRepository.save(user);
+  }
+
+  @Action(/^open_suggestion(?::(.+))?$/)
+  async onOpenSuggestion(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const source = ctx.match?.[1];
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    if (source === 'settings') {
+      user.stateData = { backTarget: 'settings' };
+      await this.userRepository.save(user);
+    } else if (source === 'main') {
+      user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    }
+    await this.supportService.handleSuggestionCommand(ctx, user);
+    await this.userRepository.save(user);
+  }
+
+  @Action(/^open_support_stars(?::(.+))?$/)
+  async onOpenSupportStars(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const source = ctx.match?.[1];
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    if (source === 'settings') {
+      user.stateData = { backTarget: 'settings' };
+      await this.userRepository.save(user);
+    } else if (source === 'main') {
+      user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    }
+    await this.onSupportStars(ctx);
+  }
+
   @Action('open_set_default')
   async onOpenSetDefault(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
@@ -206,15 +261,15 @@ export class TelegramBotService {
       const fromUser = ctx.from;
       const dbUser = user;
 
-      let message = `👋 Привет, ${fromUser?.first_name || ''}! Я бот для расписания занятий.\n\nВот что я умею:`;
+      let message = `👋 Привет, ${fromUser?.first_name || ''}! это ysturasp бот`;
 
       const mainButtons = [
-        [Markup.button.callback('📩 Отправить проблему', 'open_support')],
-        [Markup.button.callback('💡 Предложить идею', 'open_suggestion')],
+        [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
+        [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
         [
           Markup.button.callback(
             '⭐ Поддержать звездами',
-            'open_support_stars',
+            'open_support_stars:main',
           ),
         ],
         [

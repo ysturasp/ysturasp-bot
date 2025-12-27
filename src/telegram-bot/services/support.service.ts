@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Context } from 'telegraf';
+import { Context, Markup } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import { User } from '../../database/entities/user.entity';
 import { SupportRequest } from '../../database/entities/support-request.entity';
@@ -20,16 +20,40 @@ export class SupportService {
 
   async handleSupportCommand(ctx: Context, user: User): Promise<void> {
     user.state = 'SUPPORT';
-    await ctx.reply(
-      'Пожалуйста, введите ваш запрос в следующем сообщении (допускается одна фотография)',
-    );
+    await this.userRepository.save(user);
+
+    const msg =
+      'Пожалуйста, введите ваш запрос в следующем сообщении (допускается одна фотография)';
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+    if (
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery
+    ) {
+      await ctx.editMessageText?.(msg, kb as any);
+    } else {
+      await ctx.reply(msg);
+    }
   }
 
   async handleSuggestionCommand(ctx: Context, user: User): Promise<void> {
     user.state = 'SUGGESTION';
-    await ctx.reply(
-      'Пожалуйста, введите ваше предложение в следующем сообщении (допускается одна фотография)',
-    );
+    await this.userRepository.save(user);
+
+    const msg =
+      'Пожалуйста, введите ваше предложение в следующем сообщении (допускается одна фотография)';
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+    if (
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery
+    ) {
+      await ctx.editMessageText?.(msg, kb as any);
+    } else {
+      await ctx.reply(msg);
+    }
   }
 
   async handleSupportText(ctx: Context, user: User, text: string) {

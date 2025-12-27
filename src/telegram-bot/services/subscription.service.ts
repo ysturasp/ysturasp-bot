@@ -55,6 +55,10 @@ export class SubscriptionService {
   }
 
   async handleSubscriptions(ctx: Context, user: User): Promise<void> {
+    if (!user.stateData || user.stateData?.backTarget !== 'settings') {
+      user.stateData = { ...(user.stateData || {}), backTarget: 'settings' };
+      await this.userRepository.save(user);
+    }
     const subs = await this.subscriptionRepository.find({
       where: { user: { id: user.id } },
     });
