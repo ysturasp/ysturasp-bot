@@ -202,6 +202,51 @@ export class TelegramBotService {
     await this.userRepository.save(user);
   }
 
+  @Action('open_createpoll')
+  async onOpenCreatePoll(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта функция доступна только администраторам.');
+      return;
+    }
+    user.stateData = { backTarget: user.stateData?.backTarget || 'main' };
+    await this.userRepository.save(user);
+    await this.pollService.handleCreatePollCommand(ctx, user);
+  }
+
+  @Action('open_broadcast')
+  async onOpenBroadcast(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта функция доступна только администраторам.');
+      return;
+    }
+    user.state = 'BROADCAST';
+    user.stateData = { backTarget: user.stateData?.backTarget || 'main' };
+    await this.userRepository.save(user);
+    const kb2 = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+    const isCallback2 =
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery;
+    if (isCallback2) {
+      try {
+        await ctx.editMessageText(
+          'Отправьте текст для рассылки или пришлите фото с подписью. После отправки рассылка будет выполнена.',
+          kb2 as any,
+        );
+        return;
+      } catch (e) {}
+    }
+    await ctx.reply(
+      'Отправьте текст для рассылки или пришлите фото с подписью. После отправки рассылка будет выполнена.',
+      kb2 as any,
+    );
+  }
+
   @Action(/^open_suggestion(?::(.+))?$/)
   async onOpenSuggestion(@Ctx() ctx: Context) {
     // @ts-ignore
@@ -255,6 +300,9 @@ export class TelegramBotService {
     const user = await this.userHelperService.getUser(ctx);
     await ctx.answerCbQuery();
     const backTarget = user.stateData?.backTarget || 'main';
+    user.state = null;
+    user.stateData = user.stateData ? { backTarget } : null;
+    await this.userRepository.save(user);
     if (backTarget === 'settings') {
       await this.subscriptionService.handleSubscriptions(ctx, user);
     } else if (backTarget === 'main') {
@@ -468,6 +516,14 @@ export class TelegramBotService {
       }
     }
 
+    if (user?.state === 'BROADCAST' && user.isAdmin) {
+      await this.broadcastService.handleBroadcastCommand(ctx, text.trim());
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      return;
+    }
+
     const allowedCommands = [
       '📅 Сегодня',
       '/today',
@@ -546,6 +602,14 @@ export class TelegramBotService {
       } catch (e) {
         this.logger.error('Error while forwarding photo to admins', e);
       }
+    }
+
+    if (user.state === 'BROADCAST' && user.isAdmin) {
+      await this.broadcastService.handleBroadcastPhoto(ctx, fileId, caption);
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      return;
     }
 
     if (user.state === 'POLL_IMAGE' && user.isAdmin) {

@@ -27,7 +27,19 @@ export class PollService {
   async handleCreatePollCommand(ctx: Context, user: User) {
     user.state = 'POLL_QUESTION';
     await this.userRepository.save(user);
-    await ctx.reply('Введите вопрос для опроса:');
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+    const isCallback =
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery;
+    if (isCallback) {
+      try {
+        await ctx.editMessageText('Введите вопрос для опроса:', kb as any);
+        return;
+      } catch (e) {}
+    }
+    await ctx.reply('Введите вопрос для опроса:', kb as any);
   }
 
   async handlePollQuestion(
@@ -38,8 +50,24 @@ export class PollService {
     user.state = 'POLL_OPTIONS';
     user.stateData = { pollQuestion: text };
     await this.userRepository.save(user);
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+    const isCallback =
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery;
+    if (isCallback) {
+      try {
+        await ctx.editMessageText(
+          'Введите варианты ответов через запятую (например: Да, Нет, Может быть):',
+          kb as any,
+        );
+        return;
+      } catch (e) {}
+    }
     await ctx.reply(
       'Введите варианты ответов через запятую (например: Да, Нет, Может быть):',
+      kb as any,
     );
   }
 
@@ -50,8 +78,24 @@ export class PollService {
   ): Promise<boolean> {
     const options = text.split(',').map((opt) => opt.trim());
     if (options.length < 2) {
+      const kb = Markup.inlineKeyboard([
+        [Markup.button.callback('« Назад', 'back_dynamic')],
+      ]);
+      const isCallback =
+        (ctx as any).updateType === 'callback_query' ||
+        (ctx as any).callbackQuery;
+      if (isCallback) {
+        try {
+          await ctx.editMessageText(
+            'Пожалуйста, введите как минимум 2 варианта ответа, разделенных запятой:',
+            kb as any,
+          );
+          return false;
+        } catch (e) {}
+      }
       await ctx.reply(
         'Пожалуйста, введите как минимум 2 варианта ответа, разделенных запятой:',
+        kb as any,
       );
       return false;
     }
@@ -62,8 +106,24 @@ export class PollService {
       pollOptions: options,
     };
     await this.userRepository.save(user);
+    const kb2 = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+    const isCallback2 =
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery;
+    if (isCallback2) {
+      try {
+        await ctx.editMessageText(
+          'Хотите добавить изображение к опросу? Отправьте фото или напишите "нет":',
+          kb2 as any,
+        );
+        return true;
+      } catch (e) {}
+    }
     await ctx.reply(
       'Хотите добавить изображение к опросу? Отправьте фото или напишите "нет":',
+      kb2 as any,
     );
     return true;
   }
@@ -81,8 +141,24 @@ export class PollService {
       user.state = 'POLL_BROADCAST';
       user.stateData = { pollId: poll.id };
       await this.userRepository.save(user);
+      const kb3 = Markup.inlineKeyboard([
+        [Markup.button.callback('« Назад', 'back_dynamic')],
+      ]);
+      const isCallback3 =
+        (ctx as any).updateType === 'callback_query' ||
+        (ctx as any).callbackQuery;
+      if (isCallback3) {
+        try {
+          await ctx.editMessageText(
+            'Опрос создан! Хотите разослать его всем пользователям? (да/нет)',
+            kb3 as any,
+          );
+          return;
+        } catch (e) {}
+      }
       await ctx.reply(
         'Опрос создан! Хотите разослать его всем пользователям? (да/нет)',
+        kb3 as any,
       );
     } else {
       await ctx.reply('Пожалуйста, отправьте фото или напишите "нет":');
@@ -105,8 +181,24 @@ export class PollService {
     user.state = 'POLL_BROADCAST';
     user.stateData = { pollId: poll.id };
     await this.userRepository.save(user);
+    const kb4 = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+    const isCallback4 =
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery;
+    if (isCallback4) {
+      try {
+        await ctx.editMessageText(
+          'Опрос с изображением создан! Хотите разослать его всем пользователям? (да/нет)',
+          kb4 as any,
+        );
+        return;
+      } catch (e) {}
+    }
     await ctx.reply(
       'Опрос с изображением создан! Хотите разослать его всем пользователям? (да/нет)',
+      kb4 as any,
     );
   }
 

@@ -7,10 +7,38 @@ import { Cache } from 'cache-manager';
 
 const groupLocks: Record<string, Promise<any> | null> = {};
 
-let _requestChain: Promise<any> = Promise.resolve();
-let _requestsInBatch = 0;
-const BATCH_SIZE = 5;
-const BATCH_DELAY_MS = 20000;
+let _concurrentRequests = 0;
+const MAX_CONCURRENT = 5;
+const requestQueue: Array<() => void> = [];
+
+async function runWithLimit<T>(fn: () => Promise<T>): Promise<T> {
+  if (_concurrentRequests < MAX_CONCURRENT) {
+    _concurrentRequests++;
+    try {
+      return await fn();
+    } finally {
+      _concurrentRequests--;
+      const next = requestQueue.shift();
+      if (next) next();
+    }
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    requestQueue.push(async () => {
+      _concurrentRequests++;
+      try {
+        const res = await fn();
+        resolve(res);
+      } catch (e) {
+        reject(e);
+      } finally {
+        _concurrentRequests--;
+        const next = requestQueue.shift();
+        if (next) next();
+      }
+    });
+  });
+}
 
 @Injectable()
 export class ScheduleService {
@@ -86,7 +114,9 @@ export class ScheduleService {
               );
               const { data } = await firstValueFrom(
                 this.httpService.get(
-                  `${this.baseUrl}/schedule/group/${encodeURIComponent(groupName)}`,
+                  `${this.baseUrl}/schedule/group/${encodeURIComponent(
+                    groupName,
+                  )}`,
                 ),
               );
 
@@ -107,20 +137,7 @@ export class ScheduleService {
             }
           }
         };
-
-        const resultPromise = (_requestChain = _requestChain.then(async () => {
-          const res = await perform();
-
-          _requestsInBatch++;
-          if (_requestsInBatch >= BATCH_SIZE) {
-            await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
-            _requestsInBatch = 0;
-          }
-
-          return res;
-        }));
-
-        const data = await resultPromise;
+        const data = await runWithLimit(() => perform());
         return data;
       } catch (error) {
         if (error instanceof AxiosError && error.response?.status === 404) {
