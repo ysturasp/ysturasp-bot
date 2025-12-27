@@ -17,7 +17,7 @@ export class Subscription {
   user: User;
 
   @Column()
-  userId: number;
+  userId: string;
 
   @Column()
   groupName: string;

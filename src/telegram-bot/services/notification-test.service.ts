@@ -15,7 +15,7 @@ export class NotificationTestService {
     private readonly scheduleService: ScheduleService,
   ) {}
 
-  async handleTestNotify(ctx: Context, userId: number) {
+  async handleTestNotify(ctx: Context, userId: string) {
     const subs = await this.subscriptionRepository.find({
       where: { user: { id: userId }, isActive: true },
     });

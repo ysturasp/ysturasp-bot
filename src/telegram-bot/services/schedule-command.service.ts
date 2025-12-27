@@ -22,7 +22,7 @@ export class ScheduleCommandService {
     private readonly scheduleService: ScheduleService,
   ) {}
 
-  async handleExams(ctx: Context, userId: number): Promise<void> {
+  async handleExams(ctx: Context, userId: string): Promise<void> {
     const subs = await this.subscriptionRepository.find({
       where: { user: { id: userId } },
     });
@@ -158,7 +158,7 @@ export class ScheduleCommandService {
 
   async handleScheduleRequest(
     ctx: Context,
-    userId: number,
+    userId: string,
     dayOffset: number | 'week',
   ): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });

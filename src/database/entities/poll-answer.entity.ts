@@ -26,7 +26,7 @@ export class PollAnswer {
   user: User;
 
   @Column()
-  userId: number;
+  userId: string;
 
   @Column()
   answer: string;
