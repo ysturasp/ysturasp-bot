@@ -22,7 +22,7 @@ export class ExamNotificationsService {
     @InjectBot() private readonly bot: Telegraf,
   ) {}
 
-  @Cron('*/1 * * * *')
+  @Cron('*/5 * * * *')
   async checkExams() {
     this.logger.debug('Checking for exam notifications...');
     const subs = await this.subscriptionRepository.find({
