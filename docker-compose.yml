@@ -17,9 +17,25 @@ services:
       - DB_DATABASE=${DB_DATABASE}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+    networks:
+      - ysturasp-svelte_default
+
+  redis:
+    image: redis:7
+    container_name: ysturasp-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
     networks:
       - ysturasp-svelte_default
 
 networks:
   ysturasp-svelte_default:
     external: true
+
+volumes:
+  redis-data:

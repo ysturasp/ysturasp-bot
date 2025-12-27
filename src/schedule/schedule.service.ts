@@ -2,8 +2,8 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
 
 const groupLocks: Record<string, Promise<any> | null> = {};
 
@@ -47,15 +47,21 @@ export class ScheduleService {
 
   constructor(
     private readonly httpService: HttpService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    @Inject('REDIS') private readonly redis: Redis,
+    private readonly configService: ConfigService,
   ) {}
 
   async getGroups(): Promise<string[]> {
     const cacheKey = 'schedule:groups_list';
     try {
-      const cached = await this.cacheManager.get<string[]>(cacheKey);
-      if (cached && cached.length) {
-        return cached;
+      const cachedRaw = await this.redis.get(cacheKey);
+      if (cachedRaw) {
+        try {
+          const parsed = JSON.parse(cachedRaw) as string[];
+          if (parsed && parsed.length) return parsed;
+        } catch (e) {
+          this.logger.debug('Failed to parse groups cache', e);
+        }
       }
 
       const { data } = await firstValueFrom(
@@ -75,7 +81,7 @@ export class ScheduleService {
       }
 
       try {
-        await this.cacheManager.set(cacheKey, items, 3600);
+        await this.redis.set(cacheKey, JSON.stringify(items), 'EX', 3600);
       } catch (e) {
         this.logger.debug('Failed to set groups cache', e);
       }
@@ -96,10 +102,15 @@ export class ScheduleService {
 
     groupLocks[groupName] = (async () => {
       try {
-        const cached = await this.cacheManager.get(cacheKey);
-        if (cached) {
-          this.logger.log(`Cache hit for group: ${groupName}`);
-          return cached;
+        const cachedRaw = await this.redis.get(cacheKey);
+        if (cachedRaw) {
+          try {
+            const cached = JSON.parse(cachedRaw);
+            this.logger.log(`Cache hit for group: ${groupName}`);
+            return cached;
+          } catch (e) {
+            this.logger.debug('Failed to parse schedule cache', e);
+          }
         }
 
         const perform = async () => {
@@ -120,7 +131,12 @@ export class ScheduleService {
                 ),
               );
 
-              await this.cacheManager.set(cacheKey, data);
+              const ttl = this.configService.get<number>('CACHE_TTL', 1200);
+              try {
+                await this.redis.set(cacheKey, JSON.stringify(data), 'EX', ttl);
+              } catch (e) {
+                this.logger.debug('Failed to set schedule cache', e);
+              }
               return data;
             } catch (err) {
               attempt++;

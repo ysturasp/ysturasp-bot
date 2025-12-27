@@ -16,16 +16,25 @@ import { Exam } from './database/entities/exam.entity';
 import { ScheduleModule } from './schedule/schedule.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    CacheModule.register({
+    CacheModule.registerAsync({
       isGlobal: true,
-      ttl: 1200000,
-      max: 100,
+      useFactory: (configService: ConfigService) => {
+        const ttl = configService.get<number>('CACHE_TTL', 1200);
+        return {
+          store: require('cache-manager-ioredis'),
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+          ttl,
+        } as any;
+      },
+      inject: [ConfigService],
     }),
     CronScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
@@ -52,6 +61,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     TelegramBotModule,
     ScheduleModule,
     NotificationsModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
