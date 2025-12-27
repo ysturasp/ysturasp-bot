@@ -21,6 +21,7 @@ export class SubscriptionService {
 
   async handleSubscribe(ctx: Context, user: User): Promise<void> {
     user.state = 'WAITING_GROUP_SUBSCRIBE';
+    user.stateData = { backTarget: user.stateData?.backTarget || 'main' };
     await this.userRepository.save(user);
     await ctx.reply('Введите название группы (например, ЦИС-33):');
   }
@@ -38,7 +39,9 @@ export class SubscriptionService {
     const buttons = subs.map((sub) => [
       Markup.button.callback(`❌ ${sub.groupName}`, `unsubscribe:${sub.id}`),
     ]);
-
+    buttons.push([Markup.button.callback('« Назад', 'back_dynamic')]);
+    user.stateData = { backTarget: user.stateData?.backTarget || 'main' };
+    await this.userRepository.save(user);
     await ctx.reply(
       'Выберите подписку для удаления:',
       Markup.inlineKeyboard(buttons),
@@ -68,7 +71,7 @@ export class SubscriptionService {
 
     const inlineKb = Markup.inlineKeyboard([
       [
-        Markup.button.callback('➕ Подписаться', 'open_subscribe'),
+        Markup.button.callback('➕ Подписаться', 'open_subscribe:settings'),
         Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
       ],
       [Markup.button.callback('⭐ Выбрать группу', 'open_set_default')],
@@ -102,7 +105,7 @@ export class SubscriptionService {
 
     const rows: any[] = [];
     rows.push(...buttons);
-    rows.push([Markup.button.callback('« Назад', 'back_to_subscriptions')]);
+    rows.push([Markup.button.callback('« Назад', 'back_dynamic')]);
 
     const keyboard = Markup.inlineKeyboard(rows);
 
@@ -125,7 +128,7 @@ export class SubscriptionService {
 
     const rows: any[] = [];
     rows.push(...buttons);
-    rows.push([Markup.button.callback('« Назад', 'back_to_subscriptions')]);
+    rows.push([Markup.button.callback('« Назад', 'back_dynamic')]);
 
     const keyboard = Markup.inlineKeyboard(rows);
 
@@ -153,7 +156,7 @@ export class SubscriptionService {
 
     await ctx.answerCbQuery();
     const kb = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', 'back_to_subscriptions')],
+      [Markup.button.callback('« Назад', 'back_dynamic')],
     ]);
     await ctx.editMessageText?.(
       `✅ Быстрый просмотр будет показывать расписание группы <b>${sub.groupName}</b>.`,
@@ -163,10 +166,13 @@ export class SubscriptionService {
 
   async handleSubscribeFromSettings(ctx: Context, user: User): Promise<void> {
     user.state = 'WAITING_GROUP_SUBSCRIBE';
+    if (!user.stateData?.backTarget) {
+      user.stateData = { backTarget: 'settings' };
+    }
     await this.userRepository.save(user);
 
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', 'back_to_subscriptions')],
+      [Markup.button.callback('« Назад', 'back_dynamic')],
     ]);
 
     await ctx.editMessageText?.(
@@ -191,7 +197,10 @@ export class SubscriptionService {
     }
 
     user.state = 'WAITING_NOTIFY_TIME';
-    user.stateData = { pendingGroup: groupName };
+    user.stateData = {
+      pendingGroup: groupName,
+      backTarget: user.stateData?.backTarget || 'main',
+    };
     await this.userRepository.save(user);
 
     await ctx.answerCbQuery();
@@ -228,19 +237,17 @@ export class SubscriptionService {
         parse_mode: 'HTML',
         ...getMainKeyboard(),
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              'Выбрать другую группу',
-              'back_to_subscribe',
-            ),
-          ],
+          [Markup.button.callback('Выбрать другую группу', 'back_dynamic')],
         ]),
       });
       return false;
     }
 
     user.state = 'WAITING_NOTIFY_TIME';
-    user.stateData = { pendingGroup: groupName };
+    user.stateData = {
+      pendingGroup: groupName,
+      backTarget: user.stateData?.backTarget || 'main',
+    };
     await this.userRepository.save(user);
 
     await ctx.reply(
@@ -283,12 +290,7 @@ export class SubscriptionService {
         parse_mode: 'HTML',
         ...getMainKeyboard(),
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              'Выбрать другую группу',
-              'back_to_subscribe',
-            ),
-          ],
+          [Markup.button.callback('Выбрать другую группу', 'back_dynamic')],
         ]),
       });
       return false;
@@ -315,7 +317,7 @@ export class SubscriptionService {
 
   async handleBackToSubscribe(ctx: Context, user: User): Promise<void> {
     user.state = 'WAITING_GROUP_SUBSCRIBE';
-    user.stateData = null;
+    user.stateData = { backTarget: 'main' };
     await this.userRepository.save(user);
 
     await ctx.answerCbQuery();

@@ -13,7 +13,6 @@ import { getMainKeyboard } from './helpers/keyboard.helper';
 import { SupportService } from './services/support.service';
 import { PollService } from './services/poll.service';
 import { BroadcastService } from './services/broadcast.service';
-import { NotificationTestService } from './services/notification-test.service';
 import { SubscriptionService } from './services/subscription.service';
 import { ScheduleCommandService } from './services/schedule-command.service';
 import { UserHelperService } from './services/user-helper.service';
@@ -32,7 +31,6 @@ export class TelegramBotService {
     private readonly supportService: SupportService,
     private readonly pollService: PollService,
     private readonly broadcastService: BroadcastService,
-    private readonly notificationTestService: NotificationTestService,
     private readonly subscriptionService: SubscriptionService,
     private readonly scheduleCommandService: ScheduleCommandService,
     private readonly userHelperService: UserHelperService,
@@ -51,42 +49,47 @@ export class TelegramBotService {
 
     const dbUser = await this.userHelperService.getUser(ctx);
 
-    let message = `👋 Привет, ${user.first_name}! Я бот для расписания занятий.
+    dbUser.stateData = { backTarget: 'main' };
+    await this.userRepository.save(dbUser);
 
-Вот что я умею:
-/support — Отправить проблему
-/suggestion — Оставить предложение
-/support_stars — Поддержать проект звездами Telegram
-/subscribe — Подписаться на уведомления
-/unsubscribe — Отписаться от уведомлений
-/subscriptions — Посмотреть текущие подписки
-/exams — Посмотреть экзамены
-/test_notify — Протестировать уведомления
+    let message = `👋 Привет, ${user.first_name}! Я бот для расписания занятий.\n\nВот что я умею:`;
 
-Также вы можете просто ввести название группы (например, ЦИС-33), чтобы посмотреть расписание или подписаться на уведомления.
-
-📅 Используйте кнопки ниже для быстрого доступа к расписанию!`;
+    const mainButtons = [
+      [Markup.button.callback('📩 Отправить проблему', 'open_support')],
+      [Markup.button.callback('💡 Предложить идею', 'open_suggestion')],
+      [Markup.button.callback('⭐ Поддержать звездами', 'open_support_stars')],
+      [
+        Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
+        Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
+      ],
+      [
+        Markup.button.url(
+          'Открыть приложение',
+          'https://t.me/ysturasp_bot/ysturasp_webapp',
+        ),
+      ],
+    ];
 
     if (dbUser.isAdmin) {
-      message += `\n\nКоманды администратора:\n/createpoll — Создать опрос\n/broadcast — Отправить сообщение всем\n/reply — Ответить на сообщение\n/replyPhoto — Ответить на сообщение с фото`;
+      mainButtons.push([
+        Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
+        Markup.button.callback('📢 Рассылка', 'open_broadcast'),
+      ]);
     }
+
+    message += `\n\nТакже вы можете просто ввести название группы (например, ЦИС-33), чтобы посмотреть расписание или подписаться на уведомления.`;
 
     await ctx.reply(message, {
       ...getMainKeyboard(),
-      ...Markup.inlineKeyboard([
-        [
-          Markup.button.url(
-            'Открыть приложение',
-            'https://t.me/ysturasp_bot/ysturasp_webapp',
-          ),
-        ],
-      ]),
+      ...Markup.inlineKeyboard(mainButtons),
     });
   }
 
   @Command('subscribe')
   async onSubscribe(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
+    user.stateData = { backTarget: 'main' };
+    await this.userRepository.save(user);
     await this.subscriptionService.handleSubscribe(ctx, user);
   }
 
@@ -142,15 +145,11 @@ export class TelegramBotService {
     await this.scheduleCommandService.handleBackToGroup(ctx, user, groupName);
   }
 
-  @Action('back_to_subscribe')
-  async onBackToSubscribe(@Ctx() ctx: Context) {
-    const user = await this.userHelperService.getUser(ctx);
-    await this.subscriptionService.handleBackToSubscribe(ctx, user);
-  }
-
   @Action('manage_subs')
   async onManageSubs(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
+    user.stateData = { backTarget: 'settings' };
+    await this.userRepository.save(user);
     await ctx.answerCbQuery();
     await this.subscriptionService.handleSubscriptions(ctx, user);
   }
@@ -162,10 +161,22 @@ export class TelegramBotService {
     await this.subscriptionService.handleUnsubscribeFromSettings(ctx, user);
   }
 
-  @Action('open_subscribe')
+  @Action(/^open_subscribe(?::(.+))?$/)
   async onOpenSubscribe(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const source = ctx.match?.[1];
     const user = await this.userHelperService.getUser(ctx);
     await ctx.answerCbQuery();
+    if (source === 'settings') {
+      user.stateData = { backTarget: 'settings' };
+      await this.userRepository.save(user);
+    } else if (source === 'main') {
+      user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    } else if (!user.stateData?.backTarget) {
+      user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    }
     await this.subscriptionService.handleSubscribeFromSettings(ctx, user);
   }
 
@@ -184,11 +195,63 @@ export class TelegramBotService {
     await this.subscriptionService.handleSetDefault(ctx, user, subId);
   }
 
-  @Action('back_to_subscriptions')
-  async onBackToSubscriptions(@Ctx() ctx: Context) {
+  @Action('back_dynamic')
+  async onBackDynamic(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
     await ctx.answerCbQuery();
-    await this.subscriptionService.handleSubscriptions(ctx, user);
+    const backTarget = user.stateData?.backTarget || 'main';
+    if (backTarget === 'settings') {
+      await this.subscriptionService.handleSubscriptions(ctx, user);
+    } else if (backTarget === 'main') {
+      const fromUser = ctx.from;
+      const dbUser = user;
+
+      let message = `👋 Привет, ${fromUser?.first_name || ''}! Я бот для расписания занятий.\n\nВот что я умею:`;
+
+      const mainButtons = [
+        [Markup.button.callback('📩 Отправить проблему', 'open_support')],
+        [Markup.button.callback('💡 Предложить идею', 'open_suggestion')],
+        [
+          Markup.button.callback(
+            '⭐ Поддержать звездами',
+            'open_support_stars',
+          ),
+        ],
+        [
+          Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
+          Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
+        ],
+        [
+          Markup.button.url(
+            'Открыть приложение',
+            'https://t.me/ysturasp_bot/ysturasp_webapp',
+          ),
+        ],
+      ];
+
+      if (dbUser.isAdmin) {
+        mainButtons.push([
+          Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
+          Markup.button.callback('📢 Рассылка', 'open_broadcast'),
+        ]);
+      }
+
+      message += `\n\nТакже вы можете просто ввести название группы (например, ЦИС-33), чтобы посмотреть расписание или подписаться на уведомления.`;
+
+      try {
+        await ctx.editMessageText(
+          message,
+          Markup.inlineKeyboard(mainButtons) as any,
+        );
+      } catch (e) {
+        await ctx.reply(message, {
+          ...getMainKeyboard(),
+          ...Markup.inlineKeyboard(mainButtons),
+        } as any);
+      }
+    } else {
+      await this.subscriptionService.handleSubscriptions(ctx, user);
+    }
   }
 
   @Action(/^admin_reply:(.+)$/)
@@ -230,12 +293,6 @@ export class TelegramBotService {
       currency: 'XTR',
       prices: [{ label: 'Поддержка бота', amount: 100 }],
     });
-  }
-
-  @Command('test_notify')
-  async onTestNotify(@Ctx() ctx: Context) {
-    const user = await this.userHelperService.getUser(ctx);
-    await this.notificationTestService.handleTestNotify(ctx, user.id);
   }
 
   @Command('createpoll')
