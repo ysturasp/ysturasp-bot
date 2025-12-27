@@ -224,9 +224,13 @@ export class SubscriptionService {
     user: User,
     groupName: string,
   ): Promise<boolean> {
-    const schedule = await this.scheduleService.getSchedule(groupName);
+    const groups = await this.scheduleService.getGroups();
+    const normalized = groupName.trim().toLowerCase();
+    const found = (groups || []).some(
+      (g) => String(g).trim().toLowerCase() === normalized,
+    );
 
-    if (!schedule) {
+    if (!found) {
       return false;
     }
 

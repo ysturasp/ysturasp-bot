@@ -130,9 +130,13 @@ export class TextHandlerService {
     }
 
     const possibleGroup = text.trim();
-    const schedule = await this.scheduleService.getSchedule(possibleGroup);
+    const groups = await this.scheduleService.getGroups();
+    const normalized = possibleGroup.toLowerCase();
+    const exists = (groups || []).some(
+      (g) => String(g).trim().toLowerCase() === normalized,
+    );
 
-    if (schedule) {
+    if (exists) {
       const keyboard = Markup.inlineKeyboard([
         [
           Markup.button.callback(

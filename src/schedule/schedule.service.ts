@@ -23,13 +23,36 @@ export class ScheduleService {
   ) {}
 
   async getGroups(): Promise<string[]> {
+    const cacheKey = 'schedule:groups_list';
     try {
+      const cached = await this.cacheManager.get<string[]>(cacheKey);
+      if (cached && cached.length) {
+        return cached;
+      }
+
       const { data } = await firstValueFrom(
-        this.httpService.get<{ items: string[] }>(
-          `${this.baseUrl}/schedule/actual_groups`,
-        ),
+        this.httpService.get<any>(`${this.baseUrl}/schedule/actual_groups`),
       );
-      return data.items;
+
+      const rawItems = data.items || [];
+      let items: string[] = [];
+      if (rawItems.length && typeof rawItems[0] === 'string') {
+        items = rawItems as string[];
+      } else {
+        items = rawItems.flatMap((section: any) => {
+          if (Array.isArray(section.groups)) return section.groups as string[];
+          if (Array.isArray(section.items)) return section.items as string[];
+          return [] as string[];
+        });
+      }
+
+      try {
+        await this.cacheManager.set(cacheKey, items, 3600);
+      } catch (e) {
+        this.logger.debug('Failed to set groups cache', e);
+      }
+
+      return items;
     } catch (error) {
       this.logger.error('Error fetching groups', error);
       return [];
