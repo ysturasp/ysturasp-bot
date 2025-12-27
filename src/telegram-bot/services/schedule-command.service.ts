@@ -38,6 +38,7 @@ export class ScheduleCommandService {
       return date.toLocaleDateString('ru-RU', {
         day: 'numeric',
         month: 'long',
+        timeZone: 'Europe/Moscow',
       });
     };
 
