@@ -16,6 +16,7 @@ import { SubscriptionService } from './services/subscription.service';
 import { ScheduleCommandService } from './services/schedule-command.service';
 import { UserHelperService } from './services/user-helper.service';
 import { TextHandlerService } from './services/text-handler.service';
+import { TelegramWebappController } from './telegram-webapp.controller';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { TextHandlerService } from './services/text-handler.service';
     ]),
     ScheduleModule,
   ],
+  controllers: [TelegramWebappController],
   providers: [
     TelegramBotService,
     SupportService,

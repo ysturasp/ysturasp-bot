@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import 'dotenv/config';
 import chalk from 'chalk';
@@ -8,6 +9,13 @@ const PORT = process.env.PORT || 5500;
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   await app.listen(PORT, () =>
     console.log(
       chalk.green(`app is running / ${convertToPersianDate(new Date())}`),
