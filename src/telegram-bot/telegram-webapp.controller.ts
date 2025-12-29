@@ -14,8 +14,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CheckNotificationStatusDto } from './dto/check-notification-status.dto';
 import { ToggleNotificationDto } from './dto/toggle-notification.dto';
+import {
+  SupportRequestDto,
+  ReplyRequestDto,
+  GetRequestsDto,
+} from './dto/support-request.dto';
 import { User } from '../database/entities/user.entity';
 import { Subscription } from '../database/entities/subscription.entity';
+import { SupportService } from './services/support.service';
 
 @Controller('api/notifications')
 export class TelegramWebappController {
@@ -27,6 +33,7 @@ export class TelegramWebappController {
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
     private readonly configService: ConfigService,
+    private readonly supportService: SupportService,
   ) {}
 
   private validateTelegramInitData(initData: string): {
@@ -313,6 +320,184 @@ export class TelegramWebappController {
     } catch (error) {
       this.logger.error('Error toggling notification', error);
       throw new BadRequestException('Failed to toggle notification');
+    }
+  }
+
+  @Post('support')
+  @HttpCode(HttpStatus.OK)
+  async createSupportRequest(@Body() dto: SupportRequestDto): Promise<{
+    success: boolean;
+    request?: {
+      id: string;
+      messages: any[];
+      status: string;
+      lastMessageAt: string;
+    };
+    error?: string;
+  }> {
+    try {
+      let userId: string;
+
+      if (dto.initData) {
+        const userData = this.validateTelegramInitData(dto.initData);
+        if (userData) {
+          const user = await this.getOrCreateUser(
+            userData.userId,
+            userData.username,
+          );
+          userId = user.chatId;
+        } else {
+          if (dto.userId) {
+            userId = dto.userId;
+          } else {
+            throw new UnauthorizedException(
+              'Invalid Telegram initData and no userId provided',
+            );
+          }
+        }
+      } else {
+        if (dto.userId) {
+          userId = dto.userId;
+        } else {
+          userId = `anonymous_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+      }
+
+      const request = await this.supportService.handleWebSupportRequest(
+        userId,
+        dto.message,
+        dto.isSecurityReport || false,
+      );
+
+      return {
+        success: true,
+        request: {
+          id: request.id,
+          messages: request.messages,
+          status: request.status,
+          lastMessageAt: request.lastMessageAt.toISOString(),
+        },
+      };
+    } catch (error) {
+      this.logger.error('Error creating support request', error);
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to create support request');
+    }
+  }
+
+  @Post('support/reply')
+  @HttpCode(HttpStatus.OK)
+  async replyToSupportRequest(@Body() dto: ReplyRequestDto): Promise<{
+    success: boolean;
+    request?: {
+      id: string;
+      messages: any[];
+      status: string;
+      lastMessageAt: string;
+    };
+    error?: string;
+  }> {
+    const userData = this.validateTelegramInitData(dto.initData);
+    if (!userData) {
+      throw new UnauthorizedException('Invalid or missing Telegram initData');
+    }
+
+    try {
+      const user = await this.getOrCreateUser(
+        userData.userId,
+        userData.username,
+      );
+
+      const request = await this.supportService.handleWebReply(
+        user.chatId,
+        dto.requestId,
+        dto.message,
+      );
+
+      if (!request) {
+        return {
+          success: false,
+          error: 'Обращение не найдено',
+        };
+      }
+
+      return {
+        success: true,
+        request: {
+          id: request.id,
+          messages: request.messages,
+          status: request.status,
+          lastMessageAt: request.lastMessageAt.toISOString(),
+        },
+      };
+    } catch (error) {
+      this.logger.error('Error replying to support request', error);
+      throw new BadRequestException('Failed to reply to support request');
+    }
+  }
+
+  @Post('support/requests')
+  @HttpCode(HttpStatus.OK)
+  async getSupportRequests(@Body() dto: GetRequestsDto): Promise<{
+    success: boolean;
+    requests: Array<{
+      id: string;
+      messages: any[];
+      status: string;
+      lastMessageAt: string;
+    }>;
+  }> {
+    try {
+      let userId: string;
+
+      if (dto.initData) {
+        const userData = this.validateTelegramInitData(dto.initData);
+        if (userData) {
+          const user = await this.getOrCreateUser(
+            userData.userId,
+            userData.username,
+          );
+          userId = user.chatId;
+        } else {
+          if (dto.userId) {
+            userId = dto.userId;
+          } else {
+            throw new UnauthorizedException(
+              'Invalid Telegram initData and no userId provided',
+            );
+          }
+        }
+      } else {
+        if (!dto.userId) {
+          throw new BadRequestException(
+            'userId is required when initData is not provided',
+          );
+        }
+        userId = dto.userId;
+      }
+
+      const requests = await this.supportService.getWebRequests(userId);
+
+      return {
+        success: true,
+        requests: requests.map((req) => ({
+          id: req.id,
+          messages: req.messages,
+          status: req.status,
+          lastMessageAt: req.lastMessageAt.toISOString(),
+        })),
+      };
+    } catch (error) {
+      this.logger.error('Error getting support requests', error);
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to get support requests');
     }
   }
 }

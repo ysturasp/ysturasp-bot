@@ -2,9 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Context, Markup } from 'telegraf';
+import { InjectBot } from 'nestjs-telegraf';
+import { Telegraf } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import { User } from '../../database/entities/user.entity';
 import { SupportRequest } from '../../database/entities/support-request.entity';
+import { EncryptionService } from './encryption.service';
 
 @Injectable()
 export class SupportService {
@@ -16,6 +19,8 @@ export class SupportService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService,
+    private readonly encryptionService: EncryptionService,
+    @InjectBot() private readonly bot: Telegraf,
   ) {}
 
   async handleSupportCommand(ctx: Context, user: User): Promise<void> {
@@ -243,5 +248,142 @@ export class SupportService {
     } catch (e) {
       await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
     }
+  }
+
+  async handleWebReplyCommand(
+    ctx: Context,
+    requestId: string,
+    replyText: string,
+  ) {
+    try {
+      const request = await this.supportRequestRepository.findOne({
+        where: { id: requestId },
+      });
+
+      if (!request) {
+        await ctx.reply('Обращение не найдено');
+        return;
+      }
+
+      request.messages.push({
+        message: replyText,
+        createdAt: new Date().toISOString(),
+        isAdmin: true,
+      });
+      request.status = 'answered';
+      request.lastMessageAt = new Date();
+      await this.supportRequestRepository.save(request);
+
+      if (request.userId) {
+        try {
+          await this.bot.telegram.sendMessage(
+            request.userId,
+            '📩 Ответ от поддержки:\n' + replyText,
+          );
+        } catch (e) {
+          this.logger.error(`Failed to send web reply to ${request.userId}`, e);
+          await ctx.reply(
+            '⚠️ Ответ сохранен, но не удалось отправить пользователю. Возможно, пользователь заблокировал бота.',
+          );
+          return;
+        }
+      }
+
+      await ctx.reply('Ответ успешно отправлен');
+    } catch (e) {
+      this.logger.error('Error handling web reply', e);
+      await ctx.reply('Ошибка при отправке ответа.');
+    }
+  }
+
+  async handleWebSupportRequest(
+    userId: string,
+    message: string,
+    isSecurityReport: boolean = false,
+  ): Promise<SupportRequest> {
+    const request = this.supportRequestRepository.create({
+      userId,
+      messages: [
+        {
+          message,
+          createdAt: new Date().toISOString(),
+          isAdmin: false,
+        },
+      ],
+      status: 'pending',
+      lastMessageAt: new Date(),
+      source: 'web',
+      isSecurityReport,
+    });
+
+    const savedRequest = await this.supportRequestRepository.save(request);
+
+    const adminChatId = this.configService.get<string>('ADMIN_CHAT_ID');
+    if (adminChatId) {
+      let adminMessage: string;
+      if (isSecurityReport && message.startsWith('[SECURITY] ')) {
+        try {
+          const encryptedMsg = message.slice('[SECURITY] '.length);
+          const decryptedMsg = this.encryptionService.decrypt(encryptedMsg);
+          adminMessage = `🔒 Новое сообщение о уязвимости:\n${decryptedMsg}\n\nОтветьте командой:\n/webreply ${savedRequest.id} ваш_ответ`;
+        } catch (e: any) {
+          const encryptedMsg = message.slice('[SECURITY] '.length);
+          adminMessage = `🔒 Новое сообщение о уязвимости\n\n❌ ${e.message}\n\nЗашифрованное сообщение:\n${encryptedMsg}\n\nОтветьте командой:\n/webreply ${savedRequest.id} ваш_ответ`;
+        }
+      } else {
+        adminMessage = `📩 Новое обращение с сайта:\n${message}\n\nОтветьте командой:\n/webreply ${savedRequest.id} ваш_ответ`;
+      }
+
+      try {
+        await this.bot.telegram.sendMessage(adminChatId, adminMessage);
+      } catch (e) {
+        this.logger.error('Failed to send admin notification', e);
+      }
+    }
+
+    return savedRequest;
+  }
+
+  async handleWebReply(
+    userId: string,
+    requestId: string,
+    message: string,
+  ): Promise<SupportRequest | null> {
+    const request = await this.supportRequestRepository.findOne({
+      where: { id: requestId, userId },
+    });
+
+    if (!request) {
+      return null;
+    }
+
+    request.messages.push({
+      message,
+      createdAt: new Date().toISOString(),
+      isAdmin: false,
+    });
+    request.lastMessageAt = new Date();
+    await this.supportRequestRepository.save(request);
+
+    const adminChatId = this.configService.get<string>('ADMIN_CHAT_ID');
+    if (adminChatId) {
+      try {
+        await this.bot.telegram.sendMessage(
+          adminChatId,
+          `📩 Новое сообщение в обращении ${requestId}:\n${message}\n\nОтветьте командой:\n/webreply ${requestId} ваш_ответ`,
+        );
+      } catch (e) {
+        this.logger.error('Failed to send admin notification', e);
+      }
+    }
+
+    return request;
+  }
+
+  async getWebRequests(userId: string): Promise<SupportRequest[]> {
+    return await this.supportRequestRepository.find({
+      where: { userId, source: 'web' },
+      order: { lastMessageAt: 'DESC' },
+    });
   }
 }

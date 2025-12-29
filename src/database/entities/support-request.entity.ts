@@ -23,6 +23,12 @@ export class SupportRequest {
     fileId?: string;
   }[];
 
+  @Column({ nullable: true })
+  source: string;
+
+  @Column({ default: false })
+  isSecurityReport: boolean;
+
   @Column({ default: 'pending' })
   status: string;
 

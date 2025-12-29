@@ -452,6 +452,28 @@ export class TelegramBotService {
     await this.supportService.handleReplyCommand(ctx, targetChatId, replyText);
   }
 
+  @Command('webreply')
+  async onWebReply(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта команда доступна только администраторам.');
+      return;
+    }
+
+    const text = (ctx.message as any).text;
+    const parts = text.split(' ');
+
+    if (parts.length < 3) {
+      await ctx.reply('Использование: /webreply request_id текст_ответа');
+      return;
+    }
+
+    const requestId = parts[1];
+    const replyText = parts.slice(2).join(' ');
+
+    await this.supportService.handleWebReplyCommand(ctx, requestId, replyText);
+  }
+
   @Command('replyPhoto')
   async onReplyPhoto(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
