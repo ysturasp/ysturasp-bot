@@ -19,6 +19,10 @@ export class NotificationsService {
     @InjectBot() private readonly bot: Telegraf,
   ) {}
 
+  private normalizeGroupName(groupName: string): string {
+    return groupName.trim().toUpperCase();
+  }
+
   @Cron('0 * * * * *')
   async handleCron() {
     this.logger.debug('Checking for notifications...');
@@ -33,11 +37,12 @@ export class NotificationsService {
 
     for (const groupName of groups) {
       try {
+        const normalizedGroupName = this.normalizeGroupName(groupName);
         const schedule = await this.scheduleService.getSchedule(groupName);
         if (!schedule) continue;
 
         await this.checkGroupSchedule(
-          groupName,
+          normalizedGroupName,
           schedule,
           subs.filter((s) => s.groupName === groupName),
         );

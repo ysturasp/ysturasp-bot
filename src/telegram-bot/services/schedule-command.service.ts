@@ -45,10 +45,10 @@ export class ScheduleCommandService {
     let foundAny = false;
     let msg = '';
     for (const sub of subs) {
-      const normalizedGroupName = sub.groupName.trim().toLowerCase();
+      const normalizedGroupName = sub.groupName.trim().toUpperCase();
       const exams = await this.examRepository
         .createQueryBuilder('exam')
-        .where('LOWER(exam.groupName) = :groupName', {
+        .where('UPPER(exam.groupName) = :groupName', {
           groupName: normalizedGroupName,
         })
         .orderBy('exam.date', 'ASC')

@@ -22,6 +22,10 @@ export class ExamNotificationsService {
     @InjectBot() private readonly bot: Telegraf,
   ) {}
 
+  private normalizeGroupName(groupName: string): string {
+    return groupName.trim().toUpperCase();
+  }
+
   @Cron('*/5 * * * *')
   async checkExams() {
     this.logger.debug('Checking for exam notifications...');
@@ -34,10 +38,11 @@ export class ExamNotificationsService {
     const sentNotifications = new Set<string>();
     for (const groupName of groups) {
       try {
+        const normalizedGroupName = this.normalizeGroupName(groupName);
         const schedule = await this.scheduleService.getSchedule(groupName);
         if (!schedule) continue;
         await this.checkGroupExams(
-          groupName,
+          normalizedGroupName,
           schedule,
           subs.filter((s) => s.groupName === groupName),
           sentNotifications,
@@ -74,8 +79,13 @@ export class ExamNotificationsService {
           existing.auditoryName !== exam.auditoryName ||
           existing.timeRange !== exam.timeRange
         ) {
-          await this.examRepository.update(existing.id, exam);
-          const payload = { ...existing, ...exam, prev: existing } as Exam & {
+          await this.examRepository.update(existing.id, { ...exam, groupName });
+          const payload = {
+            ...existing,
+            ...exam,
+            groupName,
+            prev: existing,
+          } as Exam & {
             prev?: Partial<Exam>;
           };
           const key = `${groupName}|${payload.lessonName}|changed`;

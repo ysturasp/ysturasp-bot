@@ -19,6 +19,10 @@ export class SubscriptionService {
     private readonly scheduleService: ScheduleService,
   ) {}
 
+  private normalizeGroupName(groupName: string): string {
+    return groupName.trim().toUpperCase();
+  }
+
   async handleSubscribe(ctx: Context, user: User): Promise<void> {
     user.state = 'WAITING_GROUP_SUBSCRIBE';
     user.stateData = { backTarget: user.stateData?.backTarget || 'main' };
@@ -190,8 +194,9 @@ export class SubscriptionService {
     user: User,
     groupName: string,
   ): Promise<void> {
+    const normalizedGroupName = this.normalizeGroupName(groupName);
     const existing = await this.subscriptionRepository.findOne({
-      where: { user: { id: user.id }, groupName },
+      where: { user: { id: user.id }, groupName: normalizedGroupName },
     });
     if (existing) {
       await ctx.answerCbQuery('Вы уже подписаны на эту группу!', {
@@ -202,7 +207,7 @@ export class SubscriptionService {
 
     user.state = 'WAITING_NOTIFY_TIME';
     user.stateData = {
-      pendingGroup: groupName,
+      pendingGroup: normalizedGroupName,
       backTarget: user.stateData?.backTarget || 'main',
     };
     await this.userRepository.save(user);
@@ -210,11 +215,16 @@ export class SubscriptionService {
     await ctx.answerCbQuery();
 
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', `back_to_group:${groupName}`)],
+      [
+        Markup.button.callback(
+          '« Назад',
+          `back_to_group:${normalizedGroupName}`,
+        ),
+      ],
     ]);
 
     await ctx.editMessageText(
-      `✅ Группа ${groupName} выбрана!\n\nЗа сколько минут до начала пары присылать уведомление? (Напишите число, например 30)`,
+      `✅ Группа ${normalizedGroupName} выбрана!\n\nЗа сколько минут до начала пары присылать уведомление? (Напишите число, например 30)`,
       keyboard,
     );
   }
@@ -234,32 +244,36 @@ export class SubscriptionService {
       return false;
     }
 
+    const normalizedGroupName = this.normalizeGroupName(groupName);
     const existing = await this.subscriptionRepository.findOne({
-      where: { user: { id: user.id }, groupName },
+      where: { user: { id: user.id }, groupName: normalizedGroupName },
     });
     if (existing) {
       user.state = null;
       user.stateData = null;
       await this.userRepository.save(user);
-      await ctx.reply(`⚠️ Вы уже подписаны на группу <b>${groupName}</b>.`, {
-        parse_mode: 'HTML',
-        ...getMainKeyboard(),
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('Выбрать другую группу', 'back_dynamic')],
-        ]),
-      });
+      await ctx.reply(
+        `⚠️ Вы уже подписаны на группу <b>${normalizedGroupName}</b>.`,
+        {
+          parse_mode: 'HTML',
+          ...getMainKeyboard(),
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Выбрать другую группу', 'back_dynamic')],
+          ]),
+        },
+      );
       return false;
     }
 
     user.state = 'WAITING_NOTIFY_TIME';
     user.stateData = {
-      pendingGroup: groupName,
+      pendingGroup: normalizedGroupName,
       backTarget: user.stateData?.backTarget || 'main',
     };
     await this.userRepository.save(user);
 
     await ctx.reply(
-      `✅ Группа ${groupName} найдена!\n\nЗа сколько минут до начала занятия присылать уведомление? (Напишите число, например 30)`,
+      `✅ Группа ${normalizedGroupName} найдена!\n\nЗа сколько минут до начала занятия присылать уведомление? (Напишите число, например 30)`,
     );
     return true;
   }
@@ -287,26 +301,30 @@ export class SubscriptionService {
       return false;
     }
 
+    const normalizedGroupName = this.normalizeGroupName(groupName);
     const existing = await this.subscriptionRepository.findOne({
-      where: { user: { id: user.id }, groupName },
+      where: { user: { id: user.id }, groupName: normalizedGroupName },
     });
     if (existing) {
       user.state = null;
       user.stateData = null;
       await this.userRepository.save(user);
-      await ctx.reply(`⚠️ Вы уже подписаны на группу <b>${groupName}</b>.`, {
-        parse_mode: 'HTML',
-        ...getMainKeyboard(),
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('Выбрать другую группу', 'back_dynamic')],
-        ]),
-      });
+      await ctx.reply(
+        `⚠️ Вы уже подписаны на группу <b>${normalizedGroupName}</b>.`,
+        {
+          parse_mode: 'HTML',
+          ...getMainKeyboard(),
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Выбрать другую группу', 'back_dynamic')],
+          ]),
+        },
+      );
       return false;
     }
 
     const sub = this.subscriptionRepository.create({
       user,
-      groupName,
+      groupName: normalizedGroupName,
       notifyMinutes: minutes,
       isActive: true,
     });
@@ -317,7 +335,7 @@ export class SubscriptionService {
     await this.userRepository.save(user);
 
     await ctx.reply(
-      `✅ Готово! Вы подписались на расписание группы <b>${groupName}</b>.\n⏰ Уведомления будут приходить за <b>${minutes} мин</b> до начала пары.`,
+      `✅ Готово! Вы подписались на расписание группы <b>${normalizedGroupName}</b>.\n⏰ Уведомления будут приходить за <b>${minutes} мин</b> до начала пары.`,
       { parse_mode: 'HTML', ...getMainKeyboard() },
     );
     return true;

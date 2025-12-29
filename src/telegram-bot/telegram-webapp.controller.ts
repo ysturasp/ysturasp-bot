@@ -36,6 +36,10 @@ export class TelegramWebappController {
     private readonly supportService: SupportService,
   ) {}
 
+  private normalizeGroupName(groupName: string): string {
+    return groupName.trim().toUpperCase();
+  }
+
   private validateTelegramInitData(initData: string): {
     userId: string;
     username?: string;
@@ -138,8 +142,9 @@ export class TelegramWebappController {
       });
 
       if (dto.groupName) {
+        const normalizedGroupName = this.normalizeGroupName(dto.groupName);
         const groupSubscription = subscriptions.find(
-          (sub) => sub.groupName === dto.groupName,
+          (sub) => sub.groupName === normalizedGroupName,
         );
 
         if (groupSubscription) {
@@ -205,10 +210,11 @@ export class TelegramWebappController {
         userData.username,
       );
 
+      const normalizedGroupName = this.normalizeGroupName(dto.groupName);
       let subscription = await this.subscriptionRepository.findOne({
         where: {
           user: { id: user.id },
-          groupName: dto.groupName,
+          groupName: normalizedGroupName,
         },
       });
 
@@ -228,7 +234,7 @@ export class TelegramWebappController {
           await this.subscriptionRepository.save(subscription);
 
           this.logger.log(
-            `Deactivated subscription for user ${user.id}, group ${dto.groupName}`,
+            `Deactivated subscription for user ${user.id}, group ${normalizedGroupName}`,
           );
 
           return {
@@ -248,7 +254,7 @@ export class TelegramWebappController {
           await this.subscriptionRepository.save(subscription);
 
           this.logger.log(
-            `Updated subscription for user ${user.id}, group ${dto.groupName}`,
+            `Updated subscription for user ${user.id}, group ${normalizedGroupName}`,
           );
 
           return {
@@ -269,7 +275,7 @@ export class TelegramWebappController {
           await this.subscriptionRepository.save(subscription);
 
           this.logger.log(
-            `Activated subscription for user ${user.id}, group ${dto.groupName}`,
+            `Activated subscription for user ${user.id}, group ${normalizedGroupName}`,
           );
 
           return {
@@ -281,7 +287,7 @@ export class TelegramWebappController {
           await this.subscriptionRepository.save(subscription);
 
           this.logger.log(
-            `Toggled off subscription for user ${user.id}, group ${dto.groupName}`,
+            `Toggled off subscription for user ${user.id}, group ${normalizedGroupName}`,
           );
 
           return {
@@ -299,7 +305,7 @@ export class TelegramWebappController {
 
         subscription = this.subscriptionRepository.create({
           user,
-          groupName: dto.groupName,
+          groupName: normalizedGroupName,
           notifyMinutes,
           isActive: true,
           hiddenSubjects,
@@ -309,7 +315,7 @@ export class TelegramWebappController {
         await this.subscriptionRepository.save(subscription);
 
         this.logger.log(
-          `Created new subscription for user ${user.id}, group ${dto.groupName}`,
+          `Created new subscription for user ${user.id}, group ${normalizedGroupName}`,
         );
 
         return {
