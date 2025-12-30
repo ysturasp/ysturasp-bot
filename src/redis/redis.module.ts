@@ -9,9 +9,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     {
       provide: 'REDIS',
       useFactory: (config: ConfigService) => {
+        const password = config.get<string>('REDIS_PASSWORD');
         return new Redis({
           host: config.get<string>('REDIS_HOST', 'localhost'),
           port: config.get<number>('REDIS_PORT', 6379),
+          ...(password && { password }),
         });
       },
       inject: [ConfigService],

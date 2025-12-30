@@ -19,6 +19,7 @@ services:
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - ACCESS_TOKEN=${ACCESS_TOKEN}
       - PRIVATE_KEY=${PRIVATE_KEY}
     networks:
@@ -30,6 +31,7 @@ services:
     restart: unless-stopped
     ports:
       - '6379:6379'
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis-data:/data
     networks:

@@ -27,10 +27,12 @@ import { RedisModule } from './redis/redis.module';
       isGlobal: true,
       useFactory: (configService: ConfigService) => {
         const ttl = configService.get<number>('CACHE_TTL', 1200);
+        const password = configService.get<string>('REDIS_PASSWORD');
         return {
           store: require('cache-manager-ioredis'),
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
+          ...(password && { password }),
           ttl,
         } as any;
       },
