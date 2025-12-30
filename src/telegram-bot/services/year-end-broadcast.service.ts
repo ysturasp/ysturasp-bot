@@ -107,7 +107,7 @@ export class YearEndBroadcastService {
 
     const orderText = `🎯 вы ${userOrderNumber}-${this.getUserOrderWord(userOrderNumber)} пользователь, присоединившийся к нашему боту`;
 
-    return `🎉✨ уважаемый ${userName}! ✨🎉
+    return `🎉✨ ${userName}, с наступающими праздниками! ✨🎉
 
 мы встретились впервые ${formattedDate},
 когда вы написали боту ysturasp команду /start.
