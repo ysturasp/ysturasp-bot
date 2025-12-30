@@ -17,6 +17,7 @@ import { SubscriptionService } from './services/subscription.service';
 import { ScheduleCommandService } from './services/schedule-command.service';
 import { UserHelperService } from './services/user-helper.service';
 import { TextHandlerService } from './services/text-handler.service';
+import { YearEndBroadcastService } from './services/year-end-broadcast.service';
 
 @Update()
 @Injectable()
@@ -35,6 +36,7 @@ export class TelegramBotService {
     private readonly scheduleCommandService: ScheduleCommandService,
     private readonly userHelperService: UserHelperService,
     private readonly textHandlerService: TextHandlerService,
+    private readonly yearEndBroadcastService: YearEndBroadcastService,
   ) {}
   @Command('exams')
   async onExams(@Ctx() ctx: Context) {
@@ -502,6 +504,20 @@ export class TelegramBotService {
       replyText,
     );
     await this.userRepository.save(user);
+  }
+
+  @Command('year_end_broadcast')
+  async onYearEndBroadcast(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта команда доступна только администраторам.');
+      return;
+    }
+
+    await ctx.reply(
+      '🚀 Запуск новогодней рассылки... Это может занять некоторое время.',
+    );
+    await this.yearEndBroadcastService.handleYearEndBroadcast(ctx);
   }
 
   @On('text')

@@ -18,6 +18,7 @@ import { UserHelperService } from './services/user-helper.service';
 import { TextHandlerService } from './services/text-handler.service';
 import { EncryptionService } from './services/encryption.service';
 import { TelegramWebappController } from './telegram-webapp.controller';
+import { YearEndBroadcastService } from './services/year-end-broadcast.service';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { TelegramWebappController } from './telegram-webapp.controller';
     UserHelperService,
     TextHandlerService,
     EncryptionService,
+    YearEndBroadcastService,
   ],
   exports: [TelegramBotService],
 })
