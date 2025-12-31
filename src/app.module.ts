@@ -14,11 +14,6 @@ import { PollAnswer } from './database/entities/poll-answer.entity';
 import { SupportRequest } from './database/entities/support-request.entity';
 import { Exam } from './database/entities/exam.entity';
 import { UserSession } from './database/entities/user-session.entity';
-import { UserLimit } from './database/entities/user-limit.entity';
-import { FormatHistory } from './database/entities/format-history.entity';
-import { Payment } from './database/entities/payment.entity';
-import { StatView } from './database/entities/stat-view.entity';
-import { StatLimit } from './database/entities/stat-limit.entity';
 import { ScheduleModule } from './schedule/schedule.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -62,11 +57,6 @@ import { RedisModule } from './redis/redis.module';
           SupportRequest,
           Exam,
           UserSession,
-          UserLimit,
-          FormatHistory,
-          Payment,
-          StatView,
-          StatLimit,
         ],
         synchronize: true,
       }),
