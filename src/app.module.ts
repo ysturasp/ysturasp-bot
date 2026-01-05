@@ -14,6 +14,7 @@ import { PollAnswer } from './database/entities/poll-answer.entity';
 import { SupportRequest } from './database/entities/support-request.entity';
 import { Exam } from './database/entities/exam.entity';
 import { UserSession } from './database/entities/user-session.entity';
+import { Referral } from './database/entities/referral.entity';
 import { ScheduleModule } from './schedule/schedule.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -57,6 +58,7 @@ import { RedisModule } from './redis/redis.module';
           SupportRequest,
           Exam,
           UserSession,
+          Referral,
         ],
         synchronize: true,
       }),

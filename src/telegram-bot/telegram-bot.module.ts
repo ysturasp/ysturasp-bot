@@ -19,6 +19,8 @@ import { TextHandlerService } from './services/text-handler.service';
 import { EncryptionService } from './services/encryption.service';
 import { TelegramWebappController } from './telegram-webapp.controller';
 import { YearEndBroadcastService } from './services/year-end-broadcast.service';
+import { Referral } from '../database/entities/referral.entity';
+import { ReferralService } from './services/referral.service';
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { YearEndBroadcastService } from './services/year-end-broadcast.service';
       Poll,
       PollAnswer,
       SupportRequest,
+      Referral,
     ]),
     ScheduleModule,
   ],
@@ -45,6 +48,7 @@ import { YearEndBroadcastService } from './services/year-end-broadcast.service';
     TextHandlerService,
     EncryptionService,
     YearEndBroadcastService,
+    ReferralService,
   ],
   exports: [TelegramBotService],
 })

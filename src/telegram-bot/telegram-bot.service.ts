@@ -4,10 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../database/entities/user.entity';
-import { Subscription } from '../database/entities/subscription.entity';
-import { Exam } from '../database/entities/exam.entity';
 import { ScheduleService } from '../schedule/schedule.service';
-import { formatSchedule } from '../helpers/schedule-formatter';
 import { ConfigService } from '@nestjs/config';
 import { getMainKeyboard } from './helpers/keyboard.helper';
 import { SupportService } from './services/support.service';
@@ -18,6 +15,7 @@ import { ScheduleCommandService } from './services/schedule-command.service';
 import { UserHelperService } from './services/user-helper.service';
 import { TextHandlerService } from './services/text-handler.service';
 import { YearEndBroadcastService } from './services/year-end-broadcast.service';
+import { ReferralService } from './services/referral.service';
 
 @Update()
 @Injectable()
@@ -37,6 +35,7 @@ export class TelegramBotService {
     private readonly userHelperService: UserHelperService,
     private readonly textHandlerService: TextHandlerService,
     private readonly yearEndBroadcastService: YearEndBroadcastService,
+    private readonly referralService: ReferralService,
   ) {}
   @Command('exams')
   async onExams(@Ctx() ctx: Context) {
@@ -50,6 +49,71 @@ export class TelegramBotService {
     if (!user || !ctx.chat) return;
 
     const dbUser = await this.userHelperService.getUser(ctx);
+    let referralProcessed = false;
+
+    const startPayload = (ctx as any).startPayload;
+    if (startPayload) {
+      const referrerUser = await this.userRepository.findOne({
+        where: { chatId: startPayload },
+      });
+
+      if (referrerUser && referrerUser.id !== dbUser.id) {
+        const hasReferral = await this.referralService.hasReferral(dbUser.id);
+        if (!hasReferral) {
+          const referral = await this.referralService.createReferralByUserId(
+            referrerUser.id,
+            dbUser.id,
+          );
+          if (referral) {
+            referralProcessed = true;
+            const referralMessage =
+              '🎉 Вы были приглашены по реферальной ссылке!\n\n' +
+              '✅ Вы получили +5 просмотров к вашему ежемесячному лимиту статистики.\n' +
+              '📊 Пригласивший вас пользователь получил +10 просмотров к своему лимиту.\n\n' +
+              'Спасибо за использование ysturasp!';
+
+            const referralButtons = [
+              [
+                Markup.button.url(
+                  'Открыть приложение',
+                  'https://t.me/ysturasp_bot/ysturasp_webapp',
+                ),
+              ],
+            ];
+
+            await ctx.reply(referralMessage, {
+              ...getMainKeyboard(),
+              ...Markup.inlineKeyboard(referralButtons),
+            });
+          } else {
+            this.logger.debug(
+              `Failed to create referral from ${referrerUser.id} to ${dbUser.id}`,
+            );
+          }
+        } else {
+          referralProcessed = true;
+          await ctx.reply(
+            'ℹ️ Вы уже были приглашены по реферальной ссылке ранее.',
+          );
+        }
+      } else if (referrerUser && referrerUser.id === dbUser.id) {
+        referralProcessed = true;
+        await ctx.reply(
+          '⚠️ Вы не можете пригласить самого себя по реферальной ссылке.',
+        );
+      } else if (!referrerUser) {
+        referralProcessed = true;
+        await ctx.reply(
+          '⚠️ Реферальная ссылка недействительна. Пользователь, который вас пригласил, не найден.',
+        );
+      }
+    }
+
+    if (referralProcessed) {
+      dbUser.stateData = { backTarget: 'main' };
+      await this.userRepository.save(dbUser);
+      return;
+    }
 
     dbUser.stateData = { backTarget: 'main' };
     await this.userRepository.save(dbUser);
