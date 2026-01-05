@@ -53,59 +53,66 @@ export class TelegramBotService {
 
     const startPayload = (ctx as any).startPayload;
     if (startPayload) {
-      const referrerUser = await this.userRepository.findOne({
-        where: { chatId: startPayload },
-      });
+      if (dbUser.picture) {
+        referralProcessed = true;
+        await ctx.reply(
+          '⚠️ Вы уже пользовались мини-приложением ранее. Реферальные коды можно применять только при первом использовании бота.',
+        );
+      } else {
+        const referrerUser = await this.userRepository.findOne({
+          where: { chatId: startPayload },
+        });
 
-      if (referrerUser && referrerUser.id !== dbUser.id) {
-        const hasReferral = await this.referralService.hasReferral(dbUser.id);
-        if (!hasReferral) {
-          const referral = await this.referralService.createReferralByUserId(
-            referrerUser.id,
-            dbUser.id,
-          );
-          if (referral) {
-            referralProcessed = true;
-            const referralMessage =
-              '🎉 Вы были приглашены по реферальной ссылке!\n\n' +
-              '✅ Вы получили +5 просмотров к вашему ежемесячному лимиту статистики.\n' +
-              '📊 Пригласивший вас пользователь получил +10 просмотров к своему лимиту.\n\n' +
-              'Спасибо за использование ysturasp!';
+        if (referrerUser && referrerUser.id !== dbUser.id) {
+          const hasReferral = await this.referralService.hasReferral(dbUser.id);
+          if (!hasReferral) {
+            const referral = await this.referralService.createReferralByUserId(
+              referrerUser.id,
+              dbUser.id,
+            );
+            if (referral) {
+              referralProcessed = true;
+              const referralMessage =
+                '🎉 Вы были приглашены по реферальной ссылке!\n\n' +
+                '✅ Вы получили +5 просмотров к вашему ежемесячному лимиту статистики.\n' +
+                '📊 Пригласивший вас пользователь получил +10 просмотров к своему лимиту.\n\n' +
+                'Спасибо за использование ysturasp!';
 
-            const referralButtons = [
-              [
-                Markup.button.url(
-                  'Открыть приложение',
-                  'https://t.me/ysturasp_bot/ysturasp_webapp',
-                ),
-              ],
-            ];
+              const referralButtons = [
+                [
+                  Markup.button.url(
+                    'Открыть приложение',
+                    'https://t.me/ysturasp_bot/ysturasp_webapp',
+                  ),
+                ],
+              ];
 
-            await ctx.reply(referralMessage, {
-              ...getMainKeyboard(),
-              ...Markup.inlineKeyboard(referralButtons),
-            });
+              await ctx.reply(referralMessage, {
+                ...getMainKeyboard(),
+                ...Markup.inlineKeyboard(referralButtons),
+              });
+            } else {
+              this.logger.debug(
+                `Failed to create referral from ${referrerUser.id} to ${dbUser.id}`,
+              );
+            }
           } else {
-            this.logger.debug(
-              `Failed to create referral from ${referrerUser.id} to ${dbUser.id}`,
+            referralProcessed = true;
+            await ctx.reply(
+              'ℹ️ Вы уже были приглашены по реферальной ссылке ранее.',
             );
           }
-        } else {
+        } else if (referrerUser && referrerUser.id === dbUser.id) {
           referralProcessed = true;
           await ctx.reply(
-            'ℹ️ Вы уже были приглашены по реферальной ссылке ранее.',
+            '⚠️ Вы не можете пригласить самого себя по реферальной ссылке.',
+          );
+        } else if (!referrerUser) {
+          referralProcessed = true;
+          await ctx.reply(
+            '⚠️ Реферальная ссылка недействительна. Пользователь, который вас пригласил, не найден.',
           );
         }
-      } else if (referrerUser && referrerUser.id === dbUser.id) {
-        referralProcessed = true;
-        await ctx.reply(
-          '⚠️ Вы не можете пригласить самого себя по реферальной ссылке.',
-        );
-      } else if (!referrerUser) {
-        referralProcessed = true;
-        await ctx.reply(
-          '⚠️ Реферальная ссылка недействительна. Пользователь, который вас пригласил, не найден.',
-        );
       }
     }
 
