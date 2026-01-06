@@ -6,6 +6,7 @@ import { SupportService } from './support.service';
 import { PollService } from './poll.service';
 import { SubscriptionService } from './subscription.service';
 import { ScheduleCommandService } from './schedule-command.service';
+import { findCanonicalGroupName } from '../../helpers/group-normalizer';
 
 @Injectable()
 export class TextHandlerService {
@@ -136,29 +137,26 @@ export class TextHandlerService {
     const possibleGroup = text.trim();
 
     const groups = await this.scheduleService.getGroups();
-    const normalized = possibleGroup.toLowerCase();
-    const exists = (groups || []).some(
-      (g) => String(g).trim().toLowerCase() === normalized,
-    );
+    const canonicalGroup = findCanonicalGroupName(possibleGroup, groups);
 
-    if (exists) {
+    if (canonicalGroup) {
       const keyboard = Markup.inlineKeyboard([
         [
           Markup.button.callback(
             '🔔 Подписаться на уведомления',
-            `quick_sub:${possibleGroup}`,
+            `quick_sub:${canonicalGroup}`,
           ),
         ],
         [
           Markup.button.callback(
             '📅 Посмотреть расписание',
-            `quick_view:${possibleGroup}`,
+            `quick_view:${canonicalGroup}`,
           ),
         ],
       ]);
 
       await ctx.reply(
-        `✅ Нашёл группу <b>${possibleGroup}</b>!\n\nЧто вы хотите сделать?`,
+        `✅ Нашёл группу <b>${canonicalGroup}</b>!\n\nЧто вы хотите сделать?`,
         { parse_mode: 'HTML', ...keyboard },
       );
       return true;

@@ -6,6 +6,7 @@ import { User } from '../../database/entities/user.entity';
 import { Subscription } from '../../database/entities/subscription.entity';
 import { ScheduleService } from '../../schedule/schedule.service';
 import { getMainKeyboard } from '../helpers/keyboard.helper';
+import { findCanonicalGroupName } from '../../helpers/group-normalizer';
 
 @Injectable()
 export class SubscriptionService {
@@ -235,16 +236,13 @@ export class SubscriptionService {
     groupName: string,
   ): Promise<boolean> {
     const groups = await this.scheduleService.getGroups();
-    const normalized = groupName.trim().toLowerCase();
-    const found = (groups || []).some(
-      (g) => String(g).trim().toLowerCase() === normalized,
-    );
+    const canonicalGroupName = findCanonicalGroupName(groupName, groups);
 
-    if (!found) {
+    if (!canonicalGroupName) {
       return false;
     }
 
-    const normalizedGroupName = this.normalizeGroupName(groupName);
+    const normalizedGroupName = this.normalizeGroupName(canonicalGroupName);
     const existing = await this.subscriptionRepository.findOne({
       where: { user: { id: user.id }, groupName: normalizedGroupName },
     });
