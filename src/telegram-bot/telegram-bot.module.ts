@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { HttpModule } from '@nestjs/axios';
 import { TelegramBotService } from './telegram-bot.service';
 import { User } from '../database/entities/user.entity';
 import { Subscription } from '../database/entities/subscription.entity';
@@ -21,6 +22,7 @@ import { TelegramWebappController } from './telegram-webapp.controller';
 import { YearEndBroadcastService } from './services/year-end-broadcast.service';
 import { Referral } from '../database/entities/referral.entity';
 import { ReferralService } from './services/referral.service';
+import { StatisticsService } from './services/statistics.service';
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { ReferralService } from './services/referral.service';
       Referral,
     ]),
     ScheduleModule,
+    HttpModule,
   ],
   controllers: [TelegramWebappController],
   providers: [
@@ -49,6 +52,7 @@ import { ReferralService } from './services/referral.service';
     EncryptionService,
     YearEndBroadcastService,
     ReferralService,
+    StatisticsService,
   ],
   exports: [TelegramBotService],
 })

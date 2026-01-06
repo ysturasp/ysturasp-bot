@@ -7,6 +7,7 @@ import { Subscription } from '../../database/entities/subscription.entity';
 import { Exam } from '../../database/entities/exam.entity';
 import { ScheduleService } from '../../schedule/schedule.service';
 import { formatSchedule } from '../../helpers/schedule-formatter';
+import { StatisticsService } from './statistics.service';
 
 @Injectable()
 export class ScheduleCommandService {
@@ -20,6 +21,7 @@ export class ScheduleCommandService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly scheduleService: ScheduleService,
+    private readonly statisticsService: StatisticsService,
   ) {}
 
   async handleExams(ctx: Context, userId: string): Promise<void> {
@@ -59,13 +61,57 @@ export class ScheduleCommandService {
       }
       foundAny = true;
       msg += `🎓 <b>Экзамены для группы ${sub.groupName}</b>\n\n`;
+
+      const institute = await this.statisticsService.getInstituteByGroup(
+        sub.groupName,
+      );
+
       for (const exam of exams) {
-        msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}\n`;
+        msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
+
+        if (institute) {
+          try {
+            const matchingDiscipline =
+              await this.statisticsService.findMatchingDiscipline(
+                institute,
+                exam.lessonName,
+              );
+
+            if (matchingDiscipline) {
+              const statistics =
+                await this.statisticsService.getSubjectStatistics(
+                  institute,
+                  matchingDiscipline,
+                );
+
+              if (statistics && statistics.totalCount > 0) {
+                const avgScore = statistics.average.toFixed(2);
+                const statsUrl = this.statisticsService.getStatisticsUrl(
+                  institute,
+                  matchingDiscipline,
+                );
+                msg += `📊 Средний балл: <a href="${statsUrl}">${avgScore} (${statistics.totalCount} оценок)</a>\n`;
+              }
+            }
+          } catch (error) {
+            this.logger.error(
+              `Error fetching statistics for ${exam.lessonName}:`,
+              error,
+            );
+          }
+        } else {
+          this.logger.debug(`No institute found for group: ${sub.groupName}`);
+        }
+
+        msg += '\n';
       }
       msg += '\n';
     }
     if (foundAny) {
-      await ctx.reply(msg.trim(), { parse_mode: 'HTML' });
+      await ctx.reply(msg.trim(), {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+      });
     } else {
       await ctx.reply('Экзамены для ваших групп не найдены.');
     }
