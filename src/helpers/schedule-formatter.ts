@@ -1,4 +1,6 @@
-export const LESSON_TYPES = {
+const MOSCOW_TZ = 'Europe/Moscow';
+
+const LESSON_TYPES = {
   0: 'Нет типа',
   1: 'Курсовой проект',
   2: 'Лекция',
@@ -19,6 +21,16 @@ export function getLessonTypeName(type: number): string {
   return LESSON_TYPES[type] || '';
 }
 
+function toMoscowStartOfDay(dateInput: Date | string): Date {
+  const date =
+    typeof dateInput === 'string' ? new Date(dateInput) : new Date(dateInput);
+  const moscowDate = new Date(
+    date.toLocaleString('en-US', { timeZone: MOSCOW_TZ }),
+  );
+  moscowDate.setHours(0, 0, 0, 0);
+  return moscowDate;
+}
+
 export function formatSchedule(
   schedule: any,
   dayOffset: number | 'week',
@@ -32,7 +44,7 @@ export function formatSchedule(
     return formatWeekSchedule(schedule, groupName);
   }
 
-  const date = new Date();
+  const date = toMoscowStartOfDay(new Date());
   if (dayOffset === 1) {
     date.setDate(date.getDate() + 1);
   }
@@ -69,8 +81,7 @@ function formatDaySchedule(
 
   for (const week of schedule.items) {
     for (const day of week.days) {
-      const dayDate = new Date(day.info.date);
-      dayDate.setHours(0, 0, 0, 0);
+      const dayDate = toMoscowStartOfDay(day.info.date);
 
       if (dayDate.getTime() === targetDate.getTime()) {
         foundLessons = day.lessons || [];
@@ -99,8 +110,7 @@ function formatDaySchedule(
 }
 
 function formatWeekSchedule(schedule: any, groupName: string): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = toMoscowStartOfDay(new Date());
 
   const weekEnd = new Date(today);
   weekEnd.setDate(weekEnd.getDate() + 7);
@@ -112,8 +122,7 @@ function formatWeekSchedule(schedule: any, groupName: string): string {
 
   for (const week of schedule.items) {
     for (const day of week.days) {
-      const dayDate = new Date(day.info.date);
-      dayDate.setHours(0, 0, 0, 0);
+      const dayDate = toMoscowStartOfDay(day.info.date);
 
       if (
         dayDate >= today &&
