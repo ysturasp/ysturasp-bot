@@ -31,6 +31,36 @@ function toMoscowStartOfDay(dateInput: Date | string): Date {
   return moscowDate;
 }
 
+function toMoscowTime(dateInput: Date | string): string {
+  const date =
+    typeof dateInput === 'string' ? new Date(dateInput) : new Date(dateInput);
+  const moscowDate = new Date(
+    date.toLocaleString('en-US', { timeZone: MOSCOW_TZ }),
+  );
+  const hh = moscowDate.getHours().toString().padStart(2, '0');
+  const mm = moscowDate.getMinutes().toString().padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+function formatLessonTime(lesson: any): string | null {
+  if (lesson.type === 256) return null;
+
+  if (lesson.timeRange) return lesson.timeRange;
+
+  if (lesson.startAt && lesson.endAt) {
+    const start = new Date(lesson.startAt);
+    const end = new Date(lesson.endAt);
+    const durationMs = end.getTime() - start.getTime();
+    const durationHours = durationMs / (1000 * 60 * 60);
+    if (durationHours >= 23) return null;
+    return `${toMoscowTime(start)}-${toMoscowTime(end)}`;
+  }
+
+  if (lesson.startAt) return toMoscowTime(lesson.startAt);
+
+  return '—';
+}
+
 export function formatSchedule(
   schedule: any,
   dayOffset: number | 'week',
@@ -100,7 +130,8 @@ function formatDaySchedule(
   foundLessons.forEach((lesson) => {
     msg += `📚 ${lesson.lessonName}\n`;
     msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
-    msg += `🕐 ${lesson.timeRange}\n`;
+    const time = formatLessonTime(lesson);
+    if (time) msg += `🕐 ${time}\n`;
     if (lesson.teacherName) msg += `👨‍🏫 ${lesson.teacherName}\n`;
     if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
     msg += '\n';
@@ -156,7 +187,8 @@ function formatWeekSchedule(schedule: any, groupName: string): string {
     day.lessons.forEach((lesson) => {
       msg += `📚 ${lesson.lessonName}\n`;
       msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
-      msg += `🕐 ${lesson.timeRange}\n`;
+      const time = formatLessonTime(lesson);
+      if (time) msg += `🕐 ${time}\n`;
       if (lesson.teacherName) msg += `👨‍🏫 ${lesson.teacherName}\n`;
       if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
       msg += '\n';
