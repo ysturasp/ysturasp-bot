@@ -38,7 +38,7 @@ services:
       - ysturasp-svelte_default
 
 networks:
-  ysturasp-svelte_default:
+  ysturasp-db:
     external: true
 
 volumes:
