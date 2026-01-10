@@ -14,3 +14,14 @@ export function getGroupsListKey(): string {
 export function getActualGroupsKey(): string {
   return 'ystu:actual_groups';
 }
+
+export function getStatisticsDisciplinesKey(institute: string): string {
+  return `statistics:disciplines:${institute}`;
+}
+
+export function getStatisticsSubjectKey(
+  institute: string,
+  discipline: string,
+): string {
+  return `statistics:subject:${institute}:${encodeURIComponent(discipline)}`;
+}

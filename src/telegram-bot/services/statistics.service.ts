@@ -4,7 +4,11 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { getActualGroupsKey } from '../../helpers/redis-keys';
+import {
+  getActualGroupsKey,
+  getStatisticsDisciplinesKey,
+  getStatisticsSubjectKey,
+} from '../../helpers/redis-keys';
 
 export type InstituteId =
   | 'btn-digital-systems'
@@ -149,7 +153,7 @@ export class StatisticsService {
   }
 
   async getDisciplines(institute: InstituteId): Promise<string[]> {
-    const cacheKey = `statistics:disciplines:${institute}`;
+    const cacheKey = getStatisticsDisciplinesKey(institute);
 
     try {
       const cachedRaw = await this.redis.get(cacheKey);
@@ -193,7 +197,7 @@ export class StatisticsService {
     institute: InstituteId,
     discipline: string,
   ): Promise<SubjectStatistics | null> {
-    const cacheKey = `statistics:subject:${institute}:${encodeURIComponent(discipline)}`;
+    const cacheKey = getStatisticsSubjectKey(institute, discipline);
 
     try {
       const cachedRaw = await this.redis.get(cacheKey);
