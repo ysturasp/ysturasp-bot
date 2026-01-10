@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { getGroupScheduleKey, getGroupsListKey } from '../helpers/redis-keys';
 
 const groupLocks: Record<string, Promise<any> | null> = {};
 
@@ -52,7 +53,7 @@ export class ScheduleService {
   ) {}
 
   async getGroups(): Promise<string[]> {
-    const cacheKey = 'schedule:groups_list';
+    const cacheKey = getGroupsListKey();
     try {
       const cachedRaw = await this.redis.get(cacheKey);
       if (cachedRaw) {
@@ -98,7 +99,7 @@ export class ScheduleService {
   }
 
   async getSchedule(groupName: string): Promise<any> {
-    const cacheKey = `schedule:${groupName}`;
+    const cacheKey = getGroupScheduleKey(groupName);
 
     if (groupLocks[groupName]) {
       return groupLocks[groupName];

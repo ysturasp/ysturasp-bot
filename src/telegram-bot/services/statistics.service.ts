@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { getActualGroupsKey } from '../../helpers/redis-keys';
 
 export type InstituteId =
   | 'btn-digital-systems'
@@ -86,7 +87,7 @@ export class StatisticsService {
 
   async getInstituteByGroup(groupName: string): Promise<InstituteId | null> {
     const normalizedGroupName = groupName.trim().toUpperCase();
-    const cacheKey = 'ystu:actual_groups';
+    const cacheKey = getActualGroupsKey();
 
     let actualGroupsData: ActualGroupsResponse | null = null;
 
