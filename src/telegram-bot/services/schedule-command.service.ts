@@ -25,14 +25,42 @@ export class ScheduleCommandService {
   ) {}
 
   async handleExams(ctx: Context, userId: string): Promise<void> {
-    const subs = await this.subscriptionRepository.find({
-      where: { user: { id: userId } },
-    });
-    if (!subs.length) {
-      await ctx.reply(
-        '❌ У вас нет активных подписок. Используйте /subscribe чтобы добавить группу.',
-      );
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      await ctx.reply('❌ Пользователь не найден.');
       return;
+    }
+
+    let groupName: string | undefined = user.preferredGroup;
+    let subs = [];
+
+    if (!groupName) {
+      subs = await this.subscriptionRepository.find({
+        where: { user: { id: userId } },
+      });
+      if (!subs.length) {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              '🔔 Подписаться на уведомления',
+              'open_subscribe:main',
+            ),
+          ],
+          [
+            Markup.button.callback(
+              '📅 Выбрать группу для просмотра',
+              'open_select_group:main',
+            ),
+          ],
+        ]);
+        await ctx.reply(
+          '❌ У вас нет активных подписок.\n\nВы можете подписаться на уведомления или выбрать группу для просмотра расписания.',
+          keyboard,
+        );
+        return;
+      }
+    } else {
+      subs = [{ groupName }];
     }
 
     const formatDate = (isoDate: string): string => {
@@ -191,7 +219,13 @@ export class ScheduleCommandService {
       ],
       [
         Markup.button.callback(
-          '📅 Посмотреть расписание',
+          '📌 Только просмотр кнопками',
+          `quick_select_group:${groupName}`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '📅 Быстрый просмотр',
           `quick_view:${groupName}`,
         ),
       ],
@@ -222,8 +256,23 @@ export class ScheduleCommandService {
         order: { id: 'DESC' },
       });
       if (!sub) {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              '🔔 Подписаться на уведомления',
+              'open_subscribe:main',
+            ),
+          ],
+          [
+            Markup.button.callback(
+              '📅 Выбрать группу для просмотра',
+              'open_select_group:main',
+            ),
+          ],
+        ]);
         await ctx.reply(
-          '❌ У вас нет активных подписок. Используйте /subscribe чтобы добавить группу.',
+          '❌ У вас нет активных подписок.\n\nВы можете подписаться на уведомления или выбрать группу для просмотра расписания.',
+          keyboard,
         );
         return;
       }

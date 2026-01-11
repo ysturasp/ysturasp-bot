@@ -199,6 +199,14 @@ export class TelegramBotService {
     await this.scheduleCommandService.handleQuickView(ctx, groupName);
   }
 
+  @Action(/^quick_select_group:(.+)$/)
+  async onQuickSelectGroup(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const groupName = ctx.match[1];
+    const user = await this.userHelperService.getUser(ctx);
+    await this.subscriptionService.handleQuickSelectGroup(ctx, user, groupName);
+  }
+
   @Action(/^view_day:(.+):(\d+)$/)
   async onViewDay(@Ctx() ctx: Context) {
     // @ts-ignore
@@ -358,6 +366,25 @@ export class TelegramBotService {
     const user = await this.userHelperService.getUser(ctx);
     await ctx.answerCbQuery();
     await this.subscriptionService.handleOpenSetDefault(ctx, user);
+  }
+
+  @Action(/^open_select_group(?::(.+))?$/)
+  async onOpenSelectGroup(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const source = ctx.match?.[1];
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    if (source === 'settings') {
+      user.stateData = { backTarget: 'settings' };
+      await this.userRepository.save(user);
+    } else if (source === 'main') {
+      user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    } else if (!user.stateData?.backTarget) {
+      user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    }
+    await this.subscriptionService.handleSelectGroupForView(ctx, user);
   }
 
   @Action(/^set_default:(\d+)$/)

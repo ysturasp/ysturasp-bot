@@ -89,6 +89,24 @@ export class TextHandlerService {
       return true;
     }
 
+    if (user.state === 'WAITING_GROUP_SELECT') {
+      if (chatType !== 'private') return false;
+      const groupName = text.trim();
+      const result = await this.subscriptionService.handleWaitingGroupSelect(
+        ctx,
+        user,
+        groupName,
+      );
+      if (!result) {
+        await ctx.reply(
+          `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
+          { parse_mode: 'HTML' },
+        );
+        return true;
+      }
+      return true;
+    }
+
     if (user.state === 'WAITING_NOTIFY_TIME') {
       const minutes = parseInt(text);
       return await this.subscriptionService.handleWaitingNotifyTime(
@@ -149,7 +167,13 @@ export class TextHandlerService {
         ],
         [
           Markup.button.callback(
-            '📅 Посмотреть расписание',
+            '📌 Только просмотр кнопками',
+            `quick_select_group:${canonicalGroup}`,
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '📅 Быстрый просмотр',
             `quick_view:${canonicalGroup}`,
           ),
         ],

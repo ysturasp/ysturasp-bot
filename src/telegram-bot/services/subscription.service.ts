@@ -68,34 +68,84 @@ export class SubscriptionService {
       where: { user: { id: user.id } },
     });
 
-    if (subs.length === 0) {
-      await ctx.reply('У вас нет активных подписок.');
-      return;
+    let msg = '⚙️ Настройки\n\n';
+
+    if (user.preferredGroup) {
+      const isSubscribed = subs.some(
+        (sub) => sub.groupName === user.preferredGroup,
+      );
+      if (!isSubscribed) {
+        msg += `📅 Группа для просмотра: <b>${user.preferredGroup}</b>\n🔕 Без уведомлений\n\n`;
+      }
     }
 
-    let msg = '⚙️ Ваши подписки:\n\n';
-    subs.forEach((sub) => {
-      msg += `👨‍💻 Группа: ${sub.groupName}\n⏰ За ${sub.notifyMinutes} минут\n\n`;
-    });
+    if (subs.length > 0) {
+      msg += '🔔 Подписки с уведомлениями:\n';
+      subs.forEach((sub) => {
+        const isPreferred = user.preferredGroup === sub.groupName;
+        msg += `👨‍💻 Группа: <b>${sub.groupName}</b>\n⏰ За ${sub.notifyMinutes} минут`;
+        if (isPreferred) {
+          msg += '\n⭐ Используется для быстрого просмотра';
+        }
+        msg += '\n\n';
+      });
+    }
 
-    const inlineKb = Markup.inlineKeyboard([
+    if (subs.length === 0 && !user.preferredGroup) {
+      msg += 'У вас нет активных подписок и не выбрана группа для просмотра.';
+    }
+
+    const buttons: any[] = [
       [
         Markup.button.callback('➕ Подписаться', 'open_subscribe:settings'),
         Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
       ],
-      [Markup.button.callback('⭐ Выбрать группу', 'open_set_default')],
-    ]);
+    ];
+
+    if (user.preferredGroup) {
+      buttons.push([
+        Markup.button.callback(
+          '📅 Сменить группу для просмотра',
+          'open_select_group:settings',
+        ),
+      ]);
+    } else {
+      buttons.push([
+        Markup.button.callback(
+          '📅 Выбрать группу для просмотра',
+          'open_select_group:settings',
+        ),
+      ]);
+    }
+
+    if (subs.length > 0) {
+      buttons.push([
+        Markup.button.callback(
+          '⭐ Выбрать группу по умолчанию',
+          'open_set_default',
+        ),
+      ]);
+    }
+
+    const inlineKb = Markup.inlineKeyboard(buttons);
 
     if (
       (ctx as any).updateType === 'callback_query' ||
       (ctx as any).callbackQuery
     ) {
       await ctx.answerCbQuery();
-      await ctx.editMessageText?.(msg, inlineKb as any);
+      await ctx.editMessageText?.(msg, {
+        parse_mode: 'HTML',
+        ...inlineKb,
+      } as any);
       return;
     }
 
-    await ctx.reply(msg, { ...getMainKeyboard(), ...inlineKb });
+    await ctx.reply(msg, {
+      parse_mode: 'HTML',
+      ...getMainKeyboard(),
+      ...inlineKb,
+    });
   }
 
   async handleUnsubscribeFromSettings(ctx: Context, user: User): Promise<void> {
@@ -346,5 +396,84 @@ export class SubscriptionService {
 
     await ctx.answerCbQuery();
     await ctx.editMessageText('Введите название группы (например, ЦИС-33):');
+  }
+
+  async handleSelectGroupForView(ctx: Context, user: User): Promise<void> {
+    user.state = 'WAITING_GROUP_SELECT';
+    if (!user.stateData?.backTarget) {
+      user.stateData = { backTarget: 'main' };
+    }
+    await this.userRepository.save(user);
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_dynamic')],
+    ]);
+
+    await ctx.answerCbQuery();
+    const isCallback =
+      (ctx as any).updateType === 'callback_query' ||
+      (ctx as any).callbackQuery;
+    if (isCallback) {
+      await ctx.editMessageText?.(
+        'Введите название группы для просмотра расписания (например, ЦИС-33):',
+        keyboard,
+      );
+    } else {
+      await ctx.reply(
+        'Введите название группы для просмотра расписания (например, ЦИС-33):',
+        keyboard,
+      );
+    }
+  }
+
+  async handleQuickSelectGroup(
+    ctx: Context,
+    user: User,
+    groupName: string,
+  ): Promise<void> {
+    const normalizedGroupName = this.normalizeGroupName(groupName);
+    user.preferredGroup = normalizedGroupName;
+    await this.userRepository.save(user);
+
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+      `✅ Группа <b>${normalizedGroupName}</b> выбрана для просмотра расписания.\n\nТеперь вы можете использовать кнопки "Сегодня", "Завтра", "Неделя" и "Экзамены" для просмотра расписания этой группы без уведомлений.`,
+      {
+        parse_mode: 'HTML',
+      },
+    );
+  }
+
+  async handleWaitingGroupSelect(
+    ctx: Context,
+    user: User,
+    groupName: string,
+  ): Promise<boolean> {
+    const groups = await this.scheduleService.getGroups();
+    const canonicalGroupName = findCanonicalGroupName(groupName, groups);
+
+    if (!canonicalGroupName) {
+      return false;
+    }
+
+    const normalizedGroupName = this.normalizeGroupName(canonicalGroupName);
+    const backTarget = user.stateData?.backTarget || 'main';
+    user.preferredGroup = normalizedGroupName;
+    user.state = null;
+    user.stateData = { backTarget };
+    await this.userRepository.save(user);
+
+    if (backTarget === 'settings') {
+      await this.handleSubscriptions(ctx, user);
+    } else {
+      await ctx.reply(
+        `✅ Группа <b>${normalizedGroupName}</b> выбрана для просмотра расписания.\n\nТеперь вы можете использовать кнопки "Сегодня", "Завтра", "Неделя" и "Экзамены" для просмотра расписания этой группы.`,
+        {
+          parse_mode: 'HTML',
+          ...getMainKeyboard(),
+        },
+      );
+    }
+    return true;
   }
 }
