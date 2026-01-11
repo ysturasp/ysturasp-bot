@@ -3,6 +3,7 @@ import {
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('users')
@@ -22,8 +23,11 @@ export class User {
   @Column({ nullable: true })
   lastName: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
 
   @Column({ nullable: true })
   state: string;
@@ -39,4 +43,10 @@ export class User {
 
   @Column({ nullable: true })
   picture: string;
+
+  @Column({ name: 'ystu_id', type: 'integer', nullable: true, unique: true })
+  ystuId: number | null;
+
+  @Column({ name: 'ystu_data', type: 'jsonb', nullable: true })
+  ystuData: Record<string, any> | null;
 }
