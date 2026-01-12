@@ -60,6 +60,7 @@ export class BroadcastService {
       try {
         await ctx.telegram.sendPhoto(user.chatId, fileId, {
           caption: '📢 Объявление:\n' + caption,
+          parse_mode: 'HTML',
         });
         success++;
       } catch (e: any) {
