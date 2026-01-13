@@ -6,7 +6,7 @@ services:
     container_name: ysturasp-bot
     restart: unless-stopped
     ports:
-      - '${PORT:-5500}:5500'
+      - '127.0.0.1:${PORT:-5500}:5500'
     environment:
       - NODE_ENV=production
       - PORT=${PORT:-5500}
