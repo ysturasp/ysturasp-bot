@@ -22,6 +22,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - ACCESS_TOKEN=${ACCESS_TOKEN}
       - PRIVATE_KEY=${PRIVATE_KEY}
+      - YSTU_TOKENS_SECRET=${YSTU_TOKENS_SECRET}
     networks:
       - ysturasp-db
 
