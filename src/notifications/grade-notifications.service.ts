@@ -137,7 +137,14 @@ export class GradeNotificationsService {
     });
 
     if (!response.ok) {
-      throw new Error('Ошибка при получении оценок ЯГТУ');
+      const errorText = await response
+        .text()
+        .catch(() => 'Unable to read error response');
+      const errorMessage = `Ошибка при получении оценок ЯГТУ: ${response.status} ${response.statusText}`;
+      this.logger.error(
+        `API Error: ${errorMessage}, Response: ${errorText.substring(0, 500)}`,
+      );
+      throw new Error(errorMessage);
     }
 
     return response.json();
@@ -403,13 +410,26 @@ export class GradeNotificationsService {
         `Found ${usersWithNotifications.length} users with grade notifications enabled`,
       );
 
-      for (const userData of usersWithNotifications) {
+      const DELAY_BETWEEN_REQUESTS_MS = 20000;
+
+      for (let i = 0; i < usersWithNotifications.length; i++) {
+        const userData = usersWithNotifications[i];
+
+        if (i > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, DELAY_BETWEEN_REQUESTS_MS),
+          );
+        }
+
         const user = await this.userRepository.findOne({
           where: { id: userData.id },
         });
 
         if (user && user.chatId && user.ystuId) {
           await this.checkUserGrades(user).catch((error) => {
+            if (error.message?.includes('429')) {
+              this.logger.warn(`Rate limit (429) hit for user ${user.id}`);
+            }
             this.logger.error(
               `Error checking grades for user ${user.id}:`,
               error,
