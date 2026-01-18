@@ -390,12 +390,12 @@ export class GradeNotificationsService {
       }
 
       const usersWithNotifications = await this.dataSource.query(`
-        SELECT u.id, u."chatId", u."ystuId", u.username, u."firstName", u."lastName"
+        SELECT u.id, u."chatId", u.ystu_id, u.username, u."firstName", u."lastName"
         FROM users u
         INNER JOIN ystu_tokens yt ON u.id = yt.user_id
         WHERE yt.is_telegram = TRUE
           AND yt.grade_notifications_enabled = TRUE
-          AND u."ystuId" IS NOT NULL
+          AND u.ystu_id IS NOT NULL
           AND u."chatId" IS NOT NULL
       `);
 
