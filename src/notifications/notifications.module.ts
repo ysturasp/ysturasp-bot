@@ -5,9 +5,18 @@ import { Subscription } from '../database/entities/subscription.entity';
 import { ScheduleModule } from '../schedule/schedule.module';
 import { ExamNotificationsService } from './exam-notifications.service';
 import { Exam } from '../database/entities/exam.entity';
+import { GradeNotificationsService } from './grade-notifications.service';
+import { User } from '../database/entities/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Subscription, Exam]), ScheduleModule],
-  providers: [NotificationsService, ExamNotificationsService],
+  imports: [
+    TypeOrmModule.forFeature([Subscription, Exam, User]),
+    ScheduleModule,
+  ],
+  providers: [
+    NotificationsService,
+    ExamNotificationsService,
+    GradeNotificationsService,
+  ],
 })
 export class NotificationsModule {}
