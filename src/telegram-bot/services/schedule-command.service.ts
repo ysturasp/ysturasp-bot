@@ -272,30 +272,34 @@ export class ScheduleCommandService {
     const message = formatSchedule(schedule, dayOffset, groupName);
 
     const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback(
-          '« Назад к выбору дня',
-          `quick_view:${groupName}`,
-        ),
-      ],
+      [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
     await ctx.editMessageText(message, keyboard);
   }
 
-  async handleViewWeek(ctx: Context, groupName: string): Promise<void> {
+  async handleViewWeek(
+    ctx: Context,
+    groupName: string,
+    weekOffset = 0,
+  ): Promise<void> {
     await ctx.answerCbQuery();
 
     const schedule = await this.scheduleService.getSchedule(groupName);
-    const message = formatSchedule(schedule, 'week', groupName);
+    const message = formatSchedule(schedule, 'week', groupName, weekOffset);
 
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          '« Назад к выбору дня',
-          `quick_view:${groupName}`,
+          '👈 Предыдущая',
+          `view_week:${groupName}:${weekOffset - 1}`,
+        ),
+        Markup.button.callback(
+          'Следующая 👉',
+          `view_week:${groupName}:${weekOffset + 1}`,
         ),
       ],
+      [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
     await ctx.editMessageText(message, keyboard);
@@ -380,6 +384,26 @@ export class ScheduleCommandService {
     }
 
     const schedule = await this.scheduleService.getSchedule(groupName);
+
+    if (dayOffset === 'week') {
+      const weekOffset = 0;
+      const message = formatSchedule(schedule, 'week', groupName, weekOffset);
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            '👈 Предыдущая',
+            `view_week:${groupName}:${weekOffset - 1}`,
+          ),
+          Markup.button.callback(
+            'Следующая 👉',
+            `view_week:${groupName}:${weekOffset + 1}`,
+          ),
+        ],
+      ]);
+      await ctx.reply(message, keyboard);
+      return;
+    }
+
     const message = formatSchedule(schedule, dayOffset, groupName);
     await ctx.reply(message);
   }

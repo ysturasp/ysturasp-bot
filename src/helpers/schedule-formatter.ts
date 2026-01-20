@@ -65,13 +65,14 @@ export function formatSchedule(
   schedule: any,
   dayOffset: number | 'week',
   groupName: string,
+  weekOffset = 0,
 ): string {
   if (!schedule || !schedule.items) {
     return '❌ Расписание не найдено.';
   }
 
   if (dayOffset === 'week') {
-    return formatWeekSchedule(schedule, groupName);
+    return formatWeekSchedule(schedule, groupName, weekOffset);
   }
 
   const date = toMoscowStartOfDay(new Date());
@@ -140,14 +141,28 @@ function formatDaySchedule(
   return msg;
 }
 
-function formatWeekSchedule(schedule: any, groupName: string): string {
+function formatWeekSchedule(
+  schedule: any,
+  groupName: string,
+  weekOffset: number,
+): string {
   const today = toMoscowStartOfDay(new Date());
+  if (weekOffset && !Number.isNaN(weekOffset)) {
+    today.setDate(today.getDate() + weekOffset * 7);
+  }
 
-  const weekEnd = new Date(today);
-  weekEnd.setDate(weekEnd.getDate() + 7);
+  const weekStart = new Date(today);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
 
   const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-  let msg = '📅 Расписание на неделю\n\n';
+  const formatShort = (d: Date) =>
+    `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1)
+      .toString()
+      .padStart(2, '0')}`;
+  let msg = `📅 Расписание на неделю (${formatShort(
+    weekStart,
+  )} – ${formatShort(weekEnd)})\n\n`;
 
   const daysWithLessons: Array<{ date: Date; lessons: any[] }> = [];
 
@@ -156,8 +171,8 @@ function formatWeekSchedule(schedule: any, groupName: string): string {
       const dayDate = toMoscowStartOfDay(day.info.date);
 
       if (
-        dayDate >= today &&
-        dayDate < weekEnd &&
+        dayDate >= weekStart &&
+        dayDate <= weekEnd &&
         day.lessons &&
         day.lessons.length > 0
       ) {

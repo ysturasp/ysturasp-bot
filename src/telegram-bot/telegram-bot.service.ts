@@ -216,11 +216,18 @@ export class TelegramBotService {
     await this.scheduleCommandService.handleViewDay(ctx, groupName, dayOffset);
   }
 
-  @Action(/^view_week:(.+)$/)
+  @Action(/^view_week:([^:]+)(?::(-?\d+))?$/)
   async onViewWeek(@Ctx() ctx: Context) {
     // @ts-ignore
     const groupName = ctx.match[1];
-    await this.scheduleCommandService.handleViewWeek(ctx, groupName);
+    // @ts-ignore
+    const offsetRaw = ctx.match[2];
+    const weekOffset = offsetRaw !== undefined ? parseInt(offsetRaw, 10) : 0;
+    await this.scheduleCommandService.handleViewWeek(
+      ctx,
+      groupName,
+      weekOffset,
+    );
   }
 
   @Action(/^back_to_group:(.+)$/)
