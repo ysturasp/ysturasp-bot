@@ -32,14 +32,20 @@ export class SupportService {
     const kb = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', 'back_dynamic')],
     ]);
+    let menuMessageId: number;
     if (
       (ctx as any).updateType === 'callback_query' ||
       (ctx as any).callbackQuery
     ) {
-      await ctx.editMessageText?.(msg, kb as any);
+      const sent = await ctx.editMessageText?.(msg, kb as any);
+      menuMessageId = (sent as any).message_id;
     } else {
-      await ctx.reply(msg);
+      const sent = await ctx.reply(msg);
+      menuMessageId = sent.message_id;
     }
+
+    user.stateData = { ...user.stateData, menuMessageId };
+    await this.userRepository.save(user);
   }
 
   async handleSuggestionCommand(ctx: Context, user: User): Promise<void> {
@@ -51,14 +57,20 @@ export class SupportService {
     const kb = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', 'back_dynamic')],
     ]);
+    let menuMessageId: number;
     if (
       (ctx as any).updateType === 'callback_query' ||
       (ctx as any).callbackQuery
     ) {
-      await ctx.editMessageText?.(msg, kb as any);
+      const sent = await ctx.editMessageText?.(msg, kb as any);
+      menuMessageId = (sent as any).message_id;
     } else {
-      await ctx.reply(msg);
+      const sent = await ctx.reply(msg);
+      menuMessageId = sent.message_id;
     }
+
+    user.stateData = { ...user.stateData, menuMessageId };
+    await this.userRepository.save(user);
   }
 
   async handleSupportText(ctx: Context, user: User, text: string) {
@@ -96,7 +108,17 @@ export class SupportService {
       kb as any,
     );
 
+    if (user.stateData?.menuMessageId) {
+      try {
+        await ctx.telegram.deleteMessage(
+          user.chatId,
+          user.stateData.menuMessageId,
+        );
+      } catch (e) {}
+    }
+
     user.state = null;
+    user.stateData = null;
     await this.userRepository.save(user);
     await ctx.reply('Ваше сообщение отправлено в поддержку. Спасибо!');
   }
@@ -142,7 +164,17 @@ export class SupportService {
       ...kb,
     });
 
+    if (user.stateData?.menuMessageId) {
+      try {
+        await ctx.telegram.deleteMessage(
+          user.chatId,
+          user.stateData.menuMessageId,
+        );
+      } catch (e) {}
+    }
+
     user.state = null;
+    user.stateData = null;
     await this.userRepository.save(user);
     await ctx.reply('Ваша фотография и текст отправлены в поддержку. Спасибо!');
   }
@@ -188,7 +220,17 @@ export class SupportService {
       ...kb,
     });
 
+    if (user.stateData?.menuMessageId) {
+      try {
+        await ctx.telegram.deleteMessage(
+          user.chatId,
+          user.stateData.menuMessageId,
+        );
+      } catch (e) {}
+    }
+
     user.state = null;
+    user.stateData = null;
     await this.userRepository.save(user);
     await ctx.reply('Ваше видео и текст отправлены в поддержку. Спасибо!');
   }
