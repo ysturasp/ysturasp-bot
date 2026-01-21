@@ -21,6 +21,10 @@ export class BroadcastService {
     await this.broadcastPhotoToAllUsers(fileId, caption, ctx);
   }
 
+  async handleBroadcastVideo(ctx: Context, fileId: string, caption: string) {
+    await this.broadcastVideoToAllUsers(fileId, caption, ctx);
+  }
+
   private async broadcastToAllUsers(text: string, ctx: Context) {
     const users = await this.userRepository.find();
     let success = 0;
@@ -73,6 +77,36 @@ export class BroadcastService {
 
     await ctx.reply(
       `Фото отправлено ${success} пользователям.\nОшибок: ${failed}${blocked.length > 0 ? `\n\nЗаблокировали бота:\n${blocked.join('\n')}` : ''}`,
+    );
+  }
+
+  private async broadcastVideoToAllUsers(
+    fileId: string,
+    caption: string,
+    ctx: Context,
+  ) {
+    const users = await this.userRepository.find();
+    let success = 0;
+    let failed = 0;
+    const blocked: string[] = [];
+
+    for (const user of users) {
+      try {
+        await ctx.telegram.sendVideo(user.chatId, fileId, {
+          caption: '📢 Объявление:\n' + caption,
+          parse_mode: 'HTML',
+        });
+        success++;
+      } catch (e: any) {
+        failed++;
+        if (e.response?.error_code === 403) {
+          blocked.push(user.username || user.chatId);
+        }
+      }
+    }
+
+    await ctx.reply(
+      `Видео отправлено ${success} пользователям.\nОшибок: ${failed}${blocked.length > 0 ? `\n\nЗаблокировали бота:\n${blocked.join('\n')}` : ''}`,
     );
   }
 }

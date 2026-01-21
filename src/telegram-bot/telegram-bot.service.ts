@@ -412,14 +412,14 @@ export class TelegramBotService {
     if (isCallback2) {
       try {
         await ctx.editMessageText(
-          'Отправьте текст для рассылки или пришлите фото с подписью. После отправки рассылка будет выполнена.',
+          'Отправьте текст для рассылки или пришлите фото/видео с подписью. После отправки рассылка будет выполнена.',
           kb2 as any,
         );
         return;
       } catch (e) {}
     }
     await ctx.reply(
-      'Отправьте текст для рассылки или пришлите фото с подписью. После отправки рассылка будет выполнена.',
+      'Отправьте текст для рассылки или пришлите фото/видео с подписью. После отправки рассылка будет выполнена.',
       kb2 as any,
     );
   }
@@ -875,6 +875,67 @@ export class TelegramBotService {
     if (!user.state && !user.isAdmin) {
       await ctx.reply(
         'Фотография получена, но не указана тема. Используйте /support или /suggestion',
+      );
+    }
+  }
+
+  @On('video')
+  async onVideo(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    const message = ctx.message as any;
+    const video = message.video;
+    const fileId = video.file_id;
+    const caption = message.caption || '';
+
+    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
+      try {
+        const admins = await this.userRepository.find({
+          where: { isAdmin: true },
+        });
+        const fromName =
+          ctx.from?.first_name || ctx.from?.username || 'Unknown';
+        const username = ctx.from?.username
+          ? `@${ctx.from.username}`
+          : 'нет username';
+        const info = `Видео от ${fromName} (${username}; chatId: ${user.chatId})\nfile_id: ${fileId}\ncaption: ${caption}`;
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
+        ]);
+        for (const admin of admins) {
+          try {
+            await ctx.telegram.sendMessage(admin.chatId, info, kb as any);
+          } catch (e) {
+            this.logger.debug(
+              `Failed forwarding video to admin ${admin.chatId}`,
+            );
+          }
+        }
+      } catch (e) {
+        this.logger.error('Error while forwarding video to admins', e);
+      }
+    }
+
+    if (user.state === 'BROADCAST' && user.isAdmin) {
+      await this.broadcastService.handleBroadcastVideo(ctx, fileId, caption);
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.isAdmin && message.caption?.startsWith('/broadcast')) {
+      const broadcastCaption = message.caption.replace('/broadcast', '').trim();
+      await this.broadcastService.handleBroadcastVideo(
+        ctx,
+        fileId,
+        broadcastCaption,
+      );
+      return;
+    }
+
+    if (!user.state && !user.isAdmin) {
+      await ctx.reply(
+        'Видео получено, но не указана тема. Используйте /support или /suggestion',
       );
     }
   }
