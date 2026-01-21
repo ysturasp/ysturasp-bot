@@ -66,13 +66,14 @@ export function formatSchedule(
   dayOffset: number | 'week',
   groupName: string,
   weekOffset = 0,
+  type: 'student' | 'teacher' | 'audience' = 'student',
 ): string {
   if (!schedule || !schedule.items) {
     return '❌ Расписание не найдено.';
   }
 
   if (dayOffset === 'week') {
-    return formatWeekSchedule(schedule, groupName, weekOffset);
+    return formatWeekSchedule(schedule, groupName, weekOffset, type);
   }
 
   const date = toMoscowStartOfDay(new Date());
@@ -80,13 +81,14 @@ export function formatSchedule(
     date.setDate(date.getDate() + 1);
   }
 
-  return formatDaySchedule(schedule, date, groupName);
+  return formatDaySchedule(schedule, date, groupName, type);
 }
 
 function formatDaySchedule(
   schedule: any,
   targetDate: Date,
   groupName: string,
+  type: 'student' | 'teacher' | 'audience' = 'student',
 ): string {
   targetDate.setHours(0, 0, 0, 0);
 
@@ -133,8 +135,17 @@ function formatDaySchedule(
     msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
     const time = formatLessonTime(lesson);
     if (time) msg += `🕐 ${time}\n`;
-    if (lesson.teacherName) msg += `👨‍🏫 ${lesson.teacherName}\n`;
+    if (lesson.teacherName && type !== 'teacher')
+      msg += `👨‍🏫 ${lesson.teacherName}\n`;
     if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
+    if (
+      (type === 'teacher' || type === 'audience') &&
+      lesson.groups &&
+      Array.isArray(lesson.groups) &&
+      lesson.groups.length > 0
+    ) {
+      msg += `👥 ${lesson.groups.join(', ')}\n`;
+    }
     msg += '\n';
   });
 
@@ -145,6 +156,7 @@ function formatWeekSchedule(
   schedule: any,
   groupName: string,
   weekOffset: number,
+  type: 'student' | 'teacher' | 'audience' = 'student',
 ): string {
   const today = toMoscowStartOfDay(new Date());
   if (weekOffset && !Number.isNaN(weekOffset)) {
@@ -204,8 +216,17 @@ function formatWeekSchedule(
       msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
       const time = formatLessonTime(lesson);
       if (time) msg += `🕐 ${time}\n`;
-      if (lesson.teacherName) msg += `👨‍🏫 ${lesson.teacherName}\n`;
+      if (lesson.teacherName && type !== 'teacher')
+        msg += `👨‍🏫 ${lesson.teacherName}\n`;
       if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
+      if (
+        (type === 'teacher' || type === 'audience') &&
+        lesson.groups &&
+        Array.isArray(lesson.groups) &&
+        lesson.groups.length > 0
+      ) {
+        msg += `👥 ${lesson.groups.join(', ')}\n`;
+      }
       msg += '\n';
     });
   });

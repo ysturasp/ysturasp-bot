@@ -269,7 +269,13 @@ export class ScheduleCommandService {
     await ctx.answerCbQuery();
 
     const schedule = await this.scheduleService.getSchedule(groupName);
-    const message = formatSchedule(schedule, dayOffset, groupName);
+    const message = formatSchedule(
+      schedule,
+      dayOffset,
+      groupName,
+      0,
+      'student',
+    );
 
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
@@ -286,7 +292,13 @@ export class ScheduleCommandService {
     await ctx.answerCbQuery();
 
     const schedule = await this.scheduleService.getSchedule(groupName);
-    const message = formatSchedule(schedule, 'week', groupName, weekOffset);
+    const message = formatSchedule(
+      schedule,
+      'week',
+      groupName,
+      weekOffset,
+      'student',
+    );
 
     const keyboard = Markup.inlineKeyboard([
       [
@@ -387,7 +399,13 @@ export class ScheduleCommandService {
 
     if (dayOffset === 'week') {
       const weekOffset = 0;
-      const message = formatSchedule(schedule, 'week', groupName, weekOffset);
+      const message = formatSchedule(
+        schedule,
+        'week',
+        groupName,
+        weekOffset,
+        'student',
+      );
       const keyboard = Markup.inlineKeyboard([
         [
           Markup.button.callback(
@@ -404,7 +422,13 @@ export class ScheduleCommandService {
       return;
     }
 
-    const message = formatSchedule(schedule, dayOffset, groupName);
+    const message = formatSchedule(
+      schedule,
+      dayOffset,
+      groupName,
+      0,
+      'student',
+    );
     await ctx.reply(message);
   }
 
@@ -560,7 +584,7 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание преподавателя не найдено.');
       return;
     }
-    const message = formatSchedule(schedule, dayOffset, '');
+    const message = formatSchedule(schedule, dayOffset, '', 0, 'teacher');
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
       : `quick_select_teacher:${teacherId}`;
@@ -583,7 +607,7 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание преподавателя не найдено.');
       return;
     }
-    const message = formatSchedule(schedule, 'week', '', weekOffset);
+    const message = formatSchedule(schedule, 'week', '', weekOffset, 'teacher');
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
       : `quick_select_teacher:${teacherId}`;
@@ -616,7 +640,7 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание аудитории не найдено.');
       return;
     }
-    const message = formatSchedule(schedule, dayOffset, '');
+    const message = formatSchedule(schedule, dayOffset, '', 0, 'audience');
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', `quick_view_audience:${audienceId}`)],
     ]);
@@ -634,7 +658,13 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание аудитории не найдено.');
       return;
     }
-    const message = formatSchedule(schedule, 'week', '', weekOffset);
+    const message = formatSchedule(
+      schedule,
+      'week',
+      '',
+      weekOffset,
+      'audience',
+    );
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
