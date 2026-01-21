@@ -887,7 +887,21 @@ export class TelegramBotService {
     const fileId = video.file_id;
     const caption = message.caption || '';
 
-    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
+    if (user.state === 'BROADCAST' && user.isAdmin) {
+      await this.broadcastService.handleBroadcastVideo(ctx, fileId, caption);
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.state === 'SUPPORT' || user.state === 'SUGGESTION') {
+      await this.supportService.handleSupportVideo(ctx, user, fileId, caption);
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user && !user.isAdmin && ctx.chat?.type === 'private' && !user.state) {
       try {
         const admins = await this.userRepository.find({
           where: { isAdmin: true },
@@ -913,14 +927,6 @@ export class TelegramBotService {
       } catch (e) {
         this.logger.error('Error while forwarding video to admins', e);
       }
-    }
-
-    if (user.state === 'BROADCAST' && user.isAdmin) {
-      await this.broadcastService.handleBroadcastVideo(ctx, fileId, caption);
-      user.state = null;
-      user.stateData = null;
-      await this.userRepository.save(user);
-      return;
     }
 
     if (user.isAdmin && message.caption?.startsWith('/broadcast')) {

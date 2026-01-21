@@ -28,7 +28,7 @@ export class SupportService {
     await this.userRepository.save(user);
 
     const msg =
-      'Пожалуйста, введите ваш запрос в следующем сообщении (допускается одна фотография)';
+      'Пожалуйста, введите ваш запрос в следующем сообщении (допускается одна фотография или видео)';
     const kb = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', 'back_dynamic')],
     ]);
@@ -47,7 +47,7 @@ export class SupportService {
     await this.userRepository.save(user);
 
     const msg =
-      'Пожалуйста, введите ваше предложение в следующем сообщении (допускается одна фотография)';
+      'Пожалуйста, введите ваше предложение в следующем сообщении (допускается одна фотография или видео)';
     const kb = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', 'back_dynamic')],
     ]);
@@ -145,6 +145,52 @@ export class SupportService {
     user.state = null;
     await this.userRepository.save(user);
     await ctx.reply('Ваша фотография и текст отправлены в поддержку. Спасибо!');
+  }
+
+  async handleSupportVideo(
+    ctx: Context,
+    user: User,
+    fileId: string,
+    caption: string,
+  ) {
+    const type = user.state === 'SUPPORT' ? 'Проблема' : 'Предложение';
+    const adminChatId = this.configService.get<string>('ADMIN_CHAT_ID');
+
+    const request = this.supportRequestRepository.create({
+      userId: user.chatId,
+      messages: [
+        {
+          message: caption || '[ВИДЕО]',
+          createdAt: new Date().toISOString(),
+          isAdmin: false,
+          mediaType: 'video',
+          fileId,
+        },
+      ],
+      status: 'pending',
+      lastMessageAt: new Date(),
+    });
+    await this.supportRequestRepository.save(request);
+
+    const name =
+      `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
+    const username = user.username ? `@${user.username}` : 'нет username';
+
+    const kb = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Ответить', callback_data: `admin_reply:${user.chatId}` }],
+        ],
+      },
+    };
+    await ctx.telegram.sendVideo(adminChatId, fileId, {
+      caption: `📩 Новая ${type} от ${name} (${username})\nТекст: ${caption}`,
+      ...kb,
+    });
+
+    user.state = null;
+    await this.userRepository.save(user);
+    await ctx.reply('Ваше видео и текст отправлены в поддержку. Спасибо!');
   }
 
   async handleReplyCommand(
