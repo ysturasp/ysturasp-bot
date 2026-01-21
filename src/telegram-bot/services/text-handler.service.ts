@@ -223,22 +223,43 @@ export class TextHandlerService {
     }
 
     const audiences = await this.scheduleService.getAudiences();
-    const audience = audiences.find(
-      (a) => a.name.toLowerCase() === text.toLowerCase().trim(),
-    );
-    if (audience) {
+    const cleanText = text.trim().toLowerCase().replace(/-/g, '');
+    const matchingAudiences = audiences.filter((a) => {
+      const cleanName = a.name.toLowerCase().replace(/-/g, '');
+      return cleanName.includes(cleanText);
+    });
+
+    if (matchingAudiences.length === 1) {
+      const audience = matchingAudiences[0];
       const keyboard = Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            'Просмотреть расписание',
-            `quick_view_audience:${audience.id}`,
+            '📅 Сегодня',
+            `view_audience_day:${audience.id}:0`,
+          ),
+          Markup.button.callback(
+            '📅 Завтра',
+            `view_audience_day:${audience.id}:1`,
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '📅 Неделя',
+            `view_audience_week:${audience.id}`,
           ),
         ],
       ]);
-      await ctx.reply(`🏛 Нашёл аудиторию: <b>${audience.name}</b>`, {
-        parse_mode: 'HTML',
-        ...keyboard,
-      });
+      await ctx.reply(
+        `🏛 Выбрано: <b>${audience.name}</b>\nПоказать расписание?`,
+        {
+          parse_mode: 'HTML',
+          ...keyboard,
+        },
+      );
+      return true;
+    } else if (matchingAudiences.length > 1) {
+      const query = text.trim();
+      await this.scheduleCommandService.handleAudienceSearch(ctx, query, 0);
       return true;
     }
 

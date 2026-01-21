@@ -633,6 +633,7 @@ export class ScheduleCommandService {
     ctx: Context,
     audienceId: string,
     dayOffset: number,
+    query?: string,
   ): Promise<void> {
     await ctx.answerCbQuery();
     const schedule = await this.scheduleService.getAudienceSchedule(audienceId);
@@ -641,8 +642,12 @@ export class ScheduleCommandService {
       return;
     }
     const message = formatSchedule(schedule, dayOffset, '', 0, 'audience');
+    const backAction = query
+      ? `quick_select_audience:${audienceId}:${query}`
+      : `quick_select_audience:${audienceId}`;
+
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', `quick_view_audience:${audienceId}`)],
+      [Markup.button.callback('« Назад', backAction)],
     ]);
     await ctx.editMessageText(message, keyboard);
   }
@@ -651,6 +656,7 @@ export class ScheduleCommandService {
     ctx: Context,
     audienceId: string,
     weekOffset = 0,
+    query?: string,
   ): Promise<void> {
     await ctx.answerCbQuery();
     const schedule = await this.scheduleService.getAudienceSchedule(audienceId);
@@ -665,57 +671,153 @@ export class ScheduleCommandService {
       weekOffset,
       'audience',
     );
+    const backAction = query
+      ? `quick_select_audience:${audienceId}:${query}`
+      : `quick_select_audience:${audienceId}`;
+
+    const prevAction = query
+      ? `view_audience_week:${audienceId}:${weekOffset - 1}:${query}`
+      : `view_audience_week:${audienceId}:${weekOffset - 1}`;
+    const nextAction = query
+      ? `view_audience_week:${audienceId}:${weekOffset + 1}:${query}`
+      : `view_audience_week:${audienceId}:${weekOffset + 1}`;
+
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.callback(
-          '👈 Предыдущая',
-          `view_audience_week:${audienceId}:${weekOffset - 1}`,
-        ),
-        Markup.button.callback(
-          'Следующая 👉',
-          `view_audience_week:${audienceId}:${weekOffset + 1}`,
-        ),
+        Markup.button.callback('👈 Предыдущая', prevAction),
+        Markup.button.callback('Следующая 👉', nextAction),
       ],
-      [Markup.button.callback('« Назад', `quick_view_audience:${audienceId}`)],
+      [Markup.button.callback('« Назад', backAction)],
     ]);
     await ctx.editMessageText(message, keyboard);
+  }
+
+  async handleQuickSelectAudience(
+    ctx: Context,
+    audienceId: string,
+    query?: string,
+  ): Promise<void> {
+    await ctx.answerCbQuery();
+    const audiences = await this.scheduleService.getAudiences();
+    const audience = audiences.find((a) => String(a.id) === String(audienceId));
+    if (!audience) {
+      await ctx.editMessageText('❌ Аудитория не найденa.');
+      return;
+    }
+
+    const rows = [
+      [
+        Markup.button.callback(
+          '📅 Сегодня',
+          query
+            ? `view_audience_day:${audience.id}:0:${query}`
+            : `view_audience_day:${audience.id}:0`,
+        ),
+        Markup.button.callback(
+          '📅 Завтра',
+          query
+            ? `view_audience_day:${audience.id}:1:${query}`
+            : `view_audience_day:${audience.id}:1`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '📅 Неделя',
+          query
+            ? `view_audience_week:${audience.id}:0:${query}`
+            : `view_audience_week:${audience.id}:0`,
+        ),
+      ],
+    ];
+
+    if (query) {
+      rows.push([
+        Markup.button.callback('« Назад к списку', `audience_search:${query}`),
+      ]);
+    }
+
+    const keyboard = Markup.inlineKeyboard(rows);
+
+    await ctx.editMessageText(
+      `🏛 Выбрано: <b>${audience.name}</b>\nПоказать расписание?`,
+      { parse_mode: 'HTML', ...keyboard },
+    );
+  }
+
+  async handleAudienceSearch(
+    ctx: Context,
+    query: string,
+    page = 0,
+  ): Promise<void> {
+    const isCallback = !!ctx.callbackQuery;
+    if (isCallback) await ctx.answerCbQuery();
+
+    const audiences = await this.scheduleService.getAudiences();
+    const cleanQuery = query.trim().toLowerCase().replace(/-/g, '');
+    const matchingAudiences = audiences.filter((a) => {
+      const cleanName = a.name.toLowerCase().replace(/-/g, '');
+      return cleanName.includes(cleanQuery);
+    });
+
+    if (matchingAudiences.length === 0) {
+      const msg = '❌ Аудитории не найдены.';
+      if (isCallback) await ctx.editMessageText(msg);
+      else await ctx.reply(msg);
+      return;
+    }
+
+    const pageSize = 10;
+    const totalPages = Math.ceil(matchingAudiences.length / pageSize);
+    const start = page * pageSize;
+    const end = start + pageSize;
+    const pagedAudiences = matchingAudiences.slice(start, end);
+
+    const buttons = pagedAudiences.map((a) => [
+      Markup.button.callback(a.name, `quick_select_audience:${a.id}:${query}`),
+    ]);
+
+    const navRow: any[] = [];
+    if (page > 0) {
+      navRow.push(
+        Markup.button.callback(
+          '👈 Пред.',
+          `audience_search:${query}:${page - 1}`,
+        ),
+      );
+    }
+    if (page < totalPages - 1) {
+      navRow.push(
+        Markup.button.callback(
+          'След. 👉',
+          `audience_search:${query}:${page + 1}`,
+        ),
+      );
+    }
+    if (navRow.length > 0) {
+      buttons.push(navRow);
+    }
+
+    const paginationText =
+      totalPages > 1 ? ` (стр. ${page + 1}/${totalPages})` : '';
+    const message = `❓ Нашёл несколько аудиторий. Пожалуйста, выберите нужную${paginationText}:`;
+
+    if (isCallback) {
+      await ctx.editMessageText(message, {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard(buttons),
+      });
+    } else {
+      await ctx.reply(message, {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard(buttons),
+      });
+    }
   }
 
   async handleQuickViewAudience(
     ctx: Context,
     audienceId: string,
   ): Promise<void> {
-    await ctx.answerCbQuery();
-    const audiences = await this.scheduleService.getAudiences();
-    const audience = audiences.find((a) => a.id === audienceId);
-    if (!audience) {
-      await ctx.editMessageText('❌ Аудитория не найденa.');
-      return;
-    }
-
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback(
-          '📅 Сегодня',
-          `view_audience_day:${audience.id}:0`,
-        ),
-        Markup.button.callback(
-          '📅 Завтра',
-          `view_audience_day:${audience.id}:1`,
-        ),
-      ],
-      [
-        Markup.button.callback(
-          '📅 Неделя',
-          `view_audience_week:${audience.id}`,
-        ),
-      ],
-      [Markup.button.callback('« Назад', 'back_dynamic')],
-    ]);
-
-    await ctx.editMessageText(
-      `🏛 Аудитория: <b>${audience.name}</b>\nПоказать расписание?`,
-      { parse_mode: 'HTML', ...keyboard },
-    );
+    await this.handleQuickSelectAudience(ctx, audienceId);
   }
 }

@@ -259,6 +259,28 @@ export class TelegramBotService {
     await this.scheduleCommandService.handleQuickViewAudience(ctx, audienceId);
   }
 
+  @Action(/^quick_select_audience:(.+)(?::(.+))?$/)
+  async onQuickSelectAudience(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const audienceId = ctx.match[1];
+    // @ts-ignore
+    const query = ctx.match[2];
+    await this.scheduleCommandService.handleQuickSelectAudience(
+      ctx,
+      audienceId,
+      query,
+    );
+  }
+
+  @Action(/^audience_search:([^:]+)(?::(\d+))?$/)
+  async onAudienceSearch(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const query = ctx.match[1];
+    // @ts-ignore
+    const page = parseInt(ctx.match[2] || '0', 10);
+    await this.scheduleCommandService.handleAudienceSearch(ctx, query, page);
+  }
+
   @Action(/^view_teacher_day:(\d+):(\d+)(?::(.+))?$/)
   async onViewTeacherDay(@Ctx() ctx: Context) {
     // @ts-ignore
@@ -292,30 +314,36 @@ export class TelegramBotService {
     );
   }
 
-  @Action(/^view_audience_day:(.+):(\d+)$/)
+  @Action(/^view_audience_day:(.+):(\d+)(?::(.+))?$/)
   async onViewAudienceDay(@Ctx() ctx: Context) {
     // @ts-ignore
     const audienceId = ctx.match[1];
     // @ts-ignore
     const dayOffset = parseInt(ctx.match[2], 10);
+    // @ts-ignore
+    const query = ctx.match[3];
     await this.scheduleCommandService.handleAudienceDay(
       ctx,
       audienceId,
       dayOffset,
+      query,
     );
   }
 
-  @Action(/^view_audience_week:([^:]+)(?::(-?\d+))?$/)
+  @Action(/^view_audience_week:([^:]+)(?::(-?\d+))?(?::(.+))?$/)
   async onViewAudienceWeek(@Ctx() ctx: Context) {
     // @ts-ignore
     const audienceId = ctx.match[1];
     // @ts-ignore
     const offsetRaw = ctx.match[2];
     const weekOffset = offsetRaw !== undefined ? parseInt(offsetRaw, 10) : 0;
+    // @ts-ignore
+    const query = ctx.match[3];
     await this.scheduleCommandService.handleAudienceWeek(
       ctx,
       audienceId,
       weekOffset,
+      query,
     );
   }
 
