@@ -25,3 +25,19 @@ export function getStatisticsSubjectKey(
 ): string {
   return `statistics:subject:${institute}:${encodeURIComponent(discipline)}`;
 }
+
+export function getTeachersListKey(): string {
+  return 'schedule:teachers_list';
+}
+
+export function getAudiencesListKey(): string {
+  return 'schedule:audiences_list';
+}
+
+export function getTeacherScheduleKey(teacherId: number | string): string {
+  return `schedule:teacher:${teacherId}`;
+}
+
+export function getAudienceScheduleKey(audienceId: string): string {
+  return `schedule:audience:${audienceId}`;
+}

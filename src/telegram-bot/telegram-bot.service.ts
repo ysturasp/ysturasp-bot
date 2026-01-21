@@ -230,6 +230,95 @@ export class TelegramBotService {
     );
   }
 
+  @Action(/^quick_select_teacher:(\d+)(?::(.+))?$/)
+  async onQuickSelectTeacher(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const teacherId = parseInt(ctx.match[1], 10);
+    // @ts-ignore
+    const query = ctx.match[2];
+    await this.scheduleCommandService.handleQuickSelectTeacher(
+      ctx,
+      teacherId,
+      query,
+    );
+  }
+
+  @Action(/^teacher_search:([^:]+)(?::(\d+))?$/)
+  async onTeacherSearch(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const query = ctx.match[1];
+    // @ts-ignore
+    const page = parseInt(ctx.match[2] || '0', 10);
+    await this.scheduleCommandService.handleTeacherSearch(ctx, query, page);
+  }
+
+  @Action(/^quick_view_audience:(.+)$/)
+  async onQuickViewAudience(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const audienceId = ctx.match[1];
+    await this.scheduleCommandService.handleQuickViewAudience(ctx, audienceId);
+  }
+
+  @Action(/^view_teacher_day:(\d+):(\d+)(?::(.+))?$/)
+  async onViewTeacherDay(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const teacherId = parseInt(ctx.match[1], 10);
+    // @ts-ignore
+    const dayOffset = parseInt(ctx.match[2], 10);
+    // @ts-ignore
+    const query = ctx.match[3];
+    await this.scheduleCommandService.handleTeacherDay(
+      ctx,
+      teacherId,
+      dayOffset,
+      query,
+    );
+  }
+
+  @Action(/^view_teacher_week:(\d+)(?::(-?\d+))?(?::(.+))?$/)
+  async onViewTeacherWeek(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const teacherId = parseInt(ctx.match[1], 10);
+    // @ts-ignore
+    const offsetRaw = ctx.match[2];
+    const weekOffset = offsetRaw !== undefined ? parseInt(offsetRaw, 10) : 0;
+    // @ts-ignore
+    const query = ctx.match[3];
+    await this.scheduleCommandService.handleTeacherWeek(
+      ctx,
+      teacherId,
+      weekOffset,
+      query,
+    );
+  }
+
+  @Action(/^view_audience_day:(.+):(\d+)$/)
+  async onViewAudienceDay(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const audienceId = ctx.match[1];
+    // @ts-ignore
+    const dayOffset = parseInt(ctx.match[2], 10);
+    await this.scheduleCommandService.handleAudienceDay(
+      ctx,
+      audienceId,
+      dayOffset,
+    );
+  }
+
+  @Action(/^view_audience_week:([^:]+)(?::(-?\d+))?$/)
+  async onViewAudienceWeek(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const audienceId = ctx.match[1];
+    // @ts-ignore
+    const offsetRaw = ctx.match[2];
+    const weekOffset = offsetRaw !== undefined ? parseInt(offsetRaw, 10) : 0;
+    await this.scheduleCommandService.handleAudienceWeek(
+      ctx,
+      audienceId,
+      weekOffset,
+    );
+  }
+
   @Action(/^back_to_group:(.+)$/)
   async onBackToGroup(@Ctx() ctx: Context) {
     // @ts-ignore

@@ -4,7 +4,14 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { getGroupScheduleKey, getGroupsListKey } from '../helpers/redis-keys';
+import {
+  getGroupScheduleKey,
+  getGroupsListKey,
+  getTeachersListKey,
+  getAudiencesListKey,
+  getTeacherScheduleKey,
+  getAudienceScheduleKey,
+} from '../helpers/redis-keys';
 
 const groupLocks: Record<string, Promise<any> | null> = {};
 
@@ -176,5 +183,109 @@ export class ScheduleService {
     })();
 
     return groupLocks[groupName];
+  }
+
+  async getTeachers(): Promise<any[]> {
+    const cacheKey = getTeachersListKey();
+    try {
+      const cachedRaw = await this.redis.get(cacheKey);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw);
+        if (parsed && parsed.length) return parsed;
+      }
+
+      const token = this.configService.get<string>('ACCESS_TOKEN');
+      const { data } = await firstValueFrom(
+        this.httpService.get<any>(
+          `${this.baseUrl}/schedule/actual_teachers`,
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+        ),
+      );
+
+      const items = data.items || [];
+      await this.redis.set(cacheKey, JSON.stringify(items), 'EX', 3600);
+      return items;
+    } catch (error) {
+      this.logger.error('Error fetching teachers', error);
+      return [];
+    }
+  }
+
+  async getAudiences(): Promise<any[]> {
+    const cacheKey = getAudiencesListKey();
+    try {
+      const cachedRaw = await this.redis.get(cacheKey);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw);
+        if (parsed && parsed.length) return parsed;
+      }
+
+      const token = this.configService.get<string>('ACCESS_TOKEN');
+      const { data } = await firstValueFrom(
+        this.httpService.get<any>(
+          `${this.baseUrl}/schedule/actual_audiences`,
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+        ),
+      );
+
+      const items = data.items || [];
+      await this.redis.set(cacheKey, JSON.stringify(items), 'EX', 3600);
+      return items;
+    } catch (error) {
+      this.logger.error('Error fetching audiences', error);
+      return [];
+    }
+  }
+
+  async getTeacherSchedule(teacherId: number | string): Promise<any> {
+    const cacheKey = getTeacherScheduleKey(teacherId);
+    try {
+      const cachedRaw = await this.redis.get(cacheKey);
+      if (cachedRaw) return JSON.parse(cachedRaw);
+
+      const token = this.configService.get<string>('ACCESS_TOKEN');
+      const { data } = await firstValueFrom(
+        this.httpService.get(
+          `${this.baseUrl}/schedule/teacher/${teacherId}`,
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+        ),
+      );
+
+      const ttl = this.configService.get<number>('CACHE_TTL', 1200);
+      await this.redis.set(cacheKey, JSON.stringify(data), 'EX', ttl);
+      return data;
+    } catch (error) {
+      this.logger.error(
+        `Error fetching teacher schedule for ${teacherId}`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  async getAudienceSchedule(audienceId: string): Promise<any> {
+    const cacheKey = getAudienceScheduleKey(audienceId);
+    try {
+      const cachedRaw = await this.redis.get(cacheKey);
+      if (cachedRaw) return JSON.parse(cachedRaw);
+
+      const token = this.configService.get<string>('ACCESS_TOKEN');
+      const { data } = await firstValueFrom(
+        this.httpService.get(
+          `${this.baseUrl}/schedule/audience/${audienceId}`,
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+        ),
+      );
+
+      const ttl = this.configService.get<number>('CACHE_TTL', 1200);
+      await this.redis.set(cacheKey, JSON.stringify(data), 'EX', ttl);
+      return data;
+    } catch (error) {
+      this.logger.error(
+        `Error fetching audience schedule for ${audienceId}`,
+        error,
+      );
+      return null;
+    }
   }
 }
