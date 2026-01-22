@@ -8,6 +8,7 @@ import { Exam } from '../../database/entities/exam.entity';
 import { ScheduleService } from '../../schedule/schedule.service';
 import { formatSchedule } from '../../helpers/schedule-formatter';
 import { StatisticsService } from './statistics.service';
+import { normalizeAudienceName } from '../../helpers/group-normalizer';
 
 @Injectable()
 export class ScheduleCommandService {
@@ -753,9 +754,9 @@ export class ScheduleCommandService {
     if (isCallback) await ctx.answerCbQuery();
 
     const audiences = await this.scheduleService.getAudiences();
-    const cleanQuery = query.trim().toLowerCase().replace(/-/g, '');
+    const cleanQuery = normalizeAudienceName(query);
     const matchingAudiences = audiences.filter((a) => {
-      const cleanName = a.name.toLowerCase().replace(/-/g, '');
+      const cleanName = normalizeAudienceName(a.name);
       return cleanName.includes(cleanQuery);
     });
 
@@ -797,9 +798,21 @@ export class ScheduleCommandService {
       buttons.push(navRow);
     }
 
+    const promptParts: string[] = [];
+    const q = cleanQuery.toLowerCase().trim();
+
+    const hasBuilding = /[а-яёa-z]/.test(q);
+    const hasNumber = /\d/.test(q);
+
+    if (hasBuilding) promptParts.push('корпусу');
+    if (hasNumber) promptParts.push('номеру');
+
+    const promptType =
+      promptParts.length > 0 ? promptParts.join(' и ') : 'данным';
+
     const paginationText =
       totalPages > 1 ? ` (стр. ${page + 1}/${totalPages})` : '';
-    const message = `❓ Нашёл несколько аудиторий. Пожалуйста, выберите нужную${paginationText}:`;
+    const message = `❓ Нашёл несколько аудиторий по <b>${promptType}</b>. Пожалуйста, выберите нужную${paginationText}:`;
 
     if (isCallback) {
       await ctx.editMessageText(message, {

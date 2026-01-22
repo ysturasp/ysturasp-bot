@@ -6,7 +6,10 @@ import { SupportService } from './support.service';
 import { PollService } from './poll.service';
 import { SubscriptionService } from './subscription.service';
 import { ScheduleCommandService } from './schedule-command.service';
-import { findCanonicalGroupName } from '../../helpers/group-normalizer';
+import {
+  findCanonicalGroupName,
+  normalizeAudienceName,
+} from '../../helpers/group-normalizer';
 
 @Injectable()
 export class TextHandlerService {
@@ -186,46 +189,10 @@ export class TextHandlerService {
       return true;
     }
 
-    const teachers = await this.scheduleService.getTeachers();
-    const matchingTeachers = teachers.filter((t) =>
-      t.name.toLowerCase().includes(text.toLowerCase().trim()),
-    );
-
-    if (matchingTeachers.length === 1) {
-      const teacher = matchingTeachers[0];
-      const keyboard = Markup.inlineKeyboard([
-        [
-          Markup.button.callback(
-            '📅 Сегодня',
-            `view_teacher_day:${teacher.id}:0`,
-          ),
-          Markup.button.callback(
-            '📅 Завтра',
-            `view_teacher_day:${teacher.id}:1`,
-          ),
-        ],
-        [
-          Markup.button.callback(
-            '📅 Неделя',
-            `view_teacher_week:${teacher.id}`,
-          ),
-        ],
-      ]);
-      await ctx.reply(
-        `👨‍🏫 Нашёл преподавателя: <b>${teacher.name}</b>\nПоказать расписание?`,
-        { parse_mode: 'HTML', ...keyboard },
-      );
-      return true;
-    } else if (matchingTeachers.length > 1) {
-      const query = text.trim();
-      await this.scheduleCommandService.handleTeacherSearch(ctx, query, 0);
-      return true;
-    }
-
     const audiences = await this.scheduleService.getAudiences();
-    const cleanText = text.trim().toLowerCase().replace(/-/g, '');
+    const cleanText = normalizeAudienceName(text);
     const matchingAudiences = audiences.filter((a) => {
-      const cleanName = a.name.toLowerCase().replace(/-/g, '');
+      const cleanName = normalizeAudienceName(a.name);
       return cleanName.includes(cleanText);
     });
 
@@ -260,6 +227,42 @@ export class TextHandlerService {
     } else if (matchingAudiences.length > 1) {
       const query = text.trim();
       await this.scheduleCommandService.handleAudienceSearch(ctx, query, 0);
+      return true;
+    }
+
+    const teachers = await this.scheduleService.getTeachers();
+    const matchingTeachers = teachers.filter((t) =>
+      t.name.toLowerCase().includes(text.toLowerCase().trim()),
+    );
+
+    if (matchingTeachers.length === 1) {
+      const teacher = matchingTeachers[0];
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            '📅 Сегодня',
+            `view_teacher_day:${teacher.id}:0`,
+          ),
+          Markup.button.callback(
+            '📅 Завтра',
+            `view_teacher_day:${teacher.id}:1`,
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '📅 Неделя',
+            `view_teacher_week:${teacher.id}`,
+          ),
+        ],
+      ]);
+      await ctx.reply(
+        `👨‍🏫 Нашёл преподавателя: <b>${teacher.name}</b>\nПоказать расписание?`,
+        { parse_mode: 'HTML', ...keyboard },
+      );
+      return true;
+    } else if (matchingTeachers.length > 1) {
+      const query = text.trim();
+      await this.scheduleCommandService.handleTeacherSearch(ctx, query, 0);
       return true;
     }
 

@@ -48,3 +48,16 @@ export function findCanonicalGroupName(
 
   return null;
 }
+
+export function normalizeAudienceName(name: string): string {
+  if (!name) return '';
+
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[-–—_]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([а-яёa-z]+)\s+(\d+[а-яёa-z]*)/gi, '$1$2')
+    .replace(/\s+/g, '')
+    .trim();
+}

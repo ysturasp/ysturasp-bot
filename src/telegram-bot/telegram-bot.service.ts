@@ -259,7 +259,7 @@ export class TelegramBotService {
     await this.scheduleCommandService.handleQuickViewAudience(ctx, audienceId);
   }
 
-  @Action(/^quick_select_audience:(.+)(?::(.+))?$/)
+  @Action(/^quick_select_audience:([^:]+)(?::(.+))?$/)
   async onQuickSelectAudience(@Ctx() ctx: Context) {
     // @ts-ignore
     const audienceId = ctx.match[1];
@@ -314,7 +314,7 @@ export class TelegramBotService {
     );
   }
 
-  @Action(/^view_audience_day:(.+):(\d+)(?::(.+))?$/)
+  @Action(/^view_audience_day:([^:]+):(\d+)(?::(.+))?$/)
   async onViewAudienceDay(@Ctx() ctx: Context) {
     // @ts-ignore
     const audienceId = ctx.match[1];
