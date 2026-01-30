@@ -15,7 +15,9 @@ import { SupportRequest } from './database/entities/support-request.entity';
 import { Exam } from './database/entities/exam.entity';
 import { UserSession } from './database/entities/user-session.entity';
 import { Referral } from './database/entities/referral.entity';
+import { BotEvent } from './database/entities/bot-event.entity';
 import { ScheduleModule } from './schedule/schedule.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RedisModule } from './redis/redis.module';
@@ -59,6 +61,7 @@ import { RedisModule } from './redis/redis.module';
           Exam,
           UserSession,
           Referral,
+          BotEvent,
         ],
         synchronize: true,
       }),
@@ -71,6 +74,7 @@ import { RedisModule } from './redis/redis.module';
       }),
       inject: [ConfigService],
     }),
+    AnalyticsModule,
     TelegramBotModule,
     ScheduleModule,
     NotificationsModule,

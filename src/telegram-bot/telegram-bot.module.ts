@@ -23,9 +23,13 @@ import { YearEndBroadcastService } from './services/year-end-broadcast.service';
 import { Referral } from '../database/entities/referral.entity';
 import { ReferralService } from './services/referral.service';
 import { StatisticsService } from './services/statistics.service';
+import { AnalyticsModule } from '../analytics/analytics.module';
+import { AnalyticsMiddleware } from './middleware/analytics.middleware';
+import { AnalyticsLauncherService } from './middleware/analytics-launcher.service';
 
 @Module({
   imports: [
+    AnalyticsModule,
     TypeOrmModule.forFeature([
       User,
       Subscription,
@@ -53,6 +57,8 @@ import { StatisticsService } from './services/statistics.service';
     YearEndBroadcastService,
     ReferralService,
     StatisticsService,
+    AnalyticsMiddleware,
+    AnalyticsLauncherService,
   ],
   exports: [TelegramBotService],
 })

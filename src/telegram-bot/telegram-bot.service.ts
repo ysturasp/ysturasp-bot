@@ -16,6 +16,7 @@ import { UserHelperService } from './services/user-helper.service';
 import { TextHandlerService } from './services/text-handler.service';
 import { YearEndBroadcastService } from './services/year-end-broadcast.service';
 import { ReferralService } from './services/referral.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Update()
 @Injectable()
@@ -36,6 +37,7 @@ export class TelegramBotService {
     private readonly textHandlerService: TextHandlerService,
     private readonly yearEndBroadcastService: YearEndBroadcastService,
     private readonly referralService: ReferralService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
   @Command('exams')
   async onExams(@Ctx() ctx: Context) {
@@ -740,6 +742,56 @@ export class TelegramBotService {
       '🚀 Запуск новогодней рассылки... Это может занять некоторое время.',
     );
     await this.yearEndBroadcastService.handleYearEndBroadcast(ctx);
+  }
+
+  @Command('analytics')
+  async onAnalytics(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта команда доступна только администраторам.');
+      return;
+    }
+
+    await ctx.reply('⏳ Формирую отчёт...');
+
+    try {
+      const [summary7, summary30, reportMonth, totalUsers] = await Promise.all([
+        this.analyticsService.getLastDaysSummary(7),
+        this.analyticsService.getLastDaysSummary(30),
+        this.analyticsService.getCurrentMonthReport(),
+        this.analyticsService.getTotalUsers(),
+      ]);
+
+      const lines: string[] = [
+        '📊 Аналитика бота',
+        '',
+        '👥 Всего уникальных пользователей (все время): ' + totalUsers,
+        '',
+        '📅 За последние 7 дней:',
+        `  • Событий: ${summary7.totalEvents}`,
+        `  • Активных пользователей: ${summary7.uniqueUsers}`,
+        '',
+        '📅 За последние 30 дней:',
+        `  • Событий: ${summary30.totalEvents}`,
+        `  • Активных пользователей: ${summary30.uniqueUsers}`,
+        '',
+        `📆 Текущий месяц (${reportMonth.month}):`,
+        `  • MAU: ${reportMonth.mau}`,
+        `  • Событий: ${reportMonth.totalEvents}`,
+        `  • Новых пользователей: ${reportMonth.newUsers}`,
+        '',
+        '🔥 Топ действий за месяц:',
+      ];
+
+      reportMonth.topEvents.slice(0, 8).forEach((e, i) => {
+        lines.push(`  ${i + 1}. ${e.eventType}: ${e.count}`);
+      });
+
+      await ctx.reply(lines.join('\n'));
+    } catch (err) {
+      this.logger.error('Analytics report failed', err);
+      await ctx.reply('❌ Не удалось сформировать отчёт. Проверьте логи.');
+    }
   }
 
   @On('text')

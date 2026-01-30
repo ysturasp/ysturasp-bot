@@ -9,6 +9,8 @@ import { ScheduleService } from '../../schedule/schedule.service';
 import { formatSchedule } from '../../helpers/schedule-formatter';
 import { StatisticsService } from './statistics.service';
 import { normalizeAudienceName } from '../../helpers/group-normalizer';
+import { AnalyticsService } from '../../analytics/analytics.service';
+import { UserHelperService } from './user-helper.service';
 
 @Injectable()
 export class ScheduleCommandService {
@@ -23,6 +25,8 @@ export class ScheduleCommandService {
     private readonly userRepository: Repository<User>,
     private readonly scheduleService: ScheduleService,
     private readonly statisticsService: StatisticsService,
+    private readonly analyticsService: AnalyticsService,
+    private readonly userHelperService: UserHelperService,
   ) {}
 
   async handleExams(ctx: Context, userId: string): Promise<void> {
@@ -74,6 +78,7 @@ export class ScheduleCommandService {
 
     let foundAny = false;
     let msg = '';
+    const groupsShown: string[] = [];
 
     for (const sub of subs) {
       const normalizedGroupName = sub.groupName.trim().toUpperCase();
@@ -89,6 +94,7 @@ export class ScheduleCommandService {
         continue;
       }
       foundAny = true;
+      groupsShown.push(sub.groupName);
       msg += `🎓 <b>Экзамены для группы ${sub.groupName}</b>\n\n`;
 
       const institute = await this.statisticsService.getInstituteByGroup(
@@ -152,6 +158,7 @@ export class ScheduleCommandService {
         });
 
         foundAny = true;
+        groupsShown.push(groupName);
         msg += `🎓 <b>Экзамены для группы ${groupName}</b>\n\n`;
 
         const institute =
@@ -205,6 +212,15 @@ export class ScheduleCommandService {
         parse_mode: 'HTML',
         link_preview_options: { is_disabled: true },
       });
+      this.analyticsService
+        .track({
+          chatId: user.chatId,
+          userId: user.id,
+          eventType: 'schedule_view:exams',
+          payload: { groups: groupsShown },
+          source: 'telegram',
+        })
+        .catch(() => {});
     } else {
       await ctx.reply('Экзамены для ваших групп не найдены.');
     }
@@ -260,6 +276,8 @@ export class ScheduleCommandService {
       `📋 Расписание для группы ${groupName}:`,
       keyboard,
     );
+
+    this.trackScheduleView(ctx, groupName, 'quick_view', {}).catch(() => {});
   }
 
   async handleViewDay(
@@ -283,6 +301,13 @@ export class ScheduleCommandService {
     ]);
 
     await ctx.editMessageText(message, keyboard);
+
+    this.trackScheduleView(
+      ctx,
+      groupName,
+      dayOffset === 0 ? 'today' : dayOffset === 1 ? 'tomorrow' : 'day',
+      { dayOffset },
+    ).catch(() => {});
   }
 
   async handleViewWeek(
@@ -316,6 +341,10 @@ export class ScheduleCommandService {
     ]);
 
     await ctx.editMessageText(message, keyboard);
+
+    this.trackScheduleView(ctx, groupName, 'week', { weekOffset }).catch(
+      () => {},
+    );
   }
 
   async handleBackToGroup(
@@ -420,6 +449,15 @@ export class ScheduleCommandService {
         ],
       ]);
       await ctx.reply(message, keyboard);
+      this.analyticsService
+        .track({
+          chatId: user.chatId,
+          userId: user.id,
+          eventType: 'schedule_view:week',
+          payload: { groupName },
+          source: 'telegram',
+        })
+        .catch(() => {});
       return;
     }
 
@@ -431,6 +469,35 @@ export class ScheduleCommandService {
       'student',
     );
     await ctx.reply(message);
+    const viewType =
+      dayOffset === 0 ? 'today' : dayOffset === 1 ? 'tomorrow' : 'day';
+    this.analyticsService
+      .track({
+        chatId: user.chatId,
+        userId: user.id,
+        eventType: `schedule_view:${viewType}`,
+        payload: { groupName, dayOffset },
+        source: 'telegram',
+      })
+      .catch(() => {});
+  }
+
+  private async trackScheduleView(
+    ctx: Context,
+    groupName: string,
+    viewType: 'today' | 'tomorrow' | 'day' | 'week' | 'quick_view',
+    extra: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const user = await this.userHelperService.getUser(ctx);
+      this.analyticsService.track({
+        chatId: user.chatId,
+        userId: user.id,
+        eventType: `schedule_view:${viewType}`,
+        payload: { groupName, ...extra },
+        source: 'telegram',
+      });
+    } catch {}
   }
 
   async handleQuickSelectTeacher(

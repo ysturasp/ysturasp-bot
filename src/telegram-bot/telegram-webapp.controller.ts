@@ -22,6 +22,7 @@ import {
 import { User } from '../database/entities/user.entity';
 import { Subscription } from '../database/entities/subscription.entity';
 import { SupportService } from './services/support.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Controller('api/notifications')
 export class TelegramWebappController {
@@ -34,6 +35,7 @@ export class TelegramWebappController {
     private readonly subscriptionRepository: Repository<Subscription>,
     private readonly configService: ConfigService,
     private readonly supportService: SupportService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   private normalizeGroupName(groupName: string): string {
@@ -134,6 +136,16 @@ export class TelegramWebappController {
         userData.username,
       );
 
+      this.analyticsService
+        .track({
+          chatId: user.chatId,
+          userId: user.id,
+          eventType: 'webapp:check_status',
+          payload: dto.groupName ? { groupName: dto.groupName } : null,
+          source: 'webapp',
+        })
+        .catch(() => {});
+
       const subscriptions = await this.subscriptionRepository.find({
         where: {
           user: { id: user.id },
@@ -209,6 +221,16 @@ export class TelegramWebappController {
         userData.userId,
         userData.username,
       );
+
+      this.analyticsService
+        .track({
+          chatId: user.chatId,
+          userId: user.id,
+          eventType: 'webapp:toggle',
+          payload: { groupName: dto.groupName },
+          source: 'webapp',
+        })
+        .catch(() => {});
 
       const normalizedGroupName = this.normalizeGroupName(dto.groupName);
       let subscription = await this.subscriptionRepository.findOne({
@@ -352,6 +374,15 @@ export class TelegramWebappController {
             userData.username,
           );
           userId = user.chatId;
+          this.analyticsService
+            .track({
+              chatId: user.chatId,
+              userId: user.id,
+              eventType: 'webapp:support',
+              payload: null,
+              source: 'webapp',
+            })
+            .catch(() => {});
         } else {
           if (dto.userId) {
             userId = dto.userId;
@@ -416,6 +447,16 @@ export class TelegramWebappController {
         userData.username,
       );
 
+      this.analyticsService
+        .track({
+          chatId: user.chatId,
+          userId: user.id,
+          eventType: 'webapp:support_reply',
+          payload: { requestId: dto.requestId },
+          source: 'webapp',
+        })
+        .catch(() => {});
+
       const request = await this.supportService.handleWebReply(
         user.chatId,
         dto.requestId,
@@ -466,6 +507,15 @@ export class TelegramWebappController {
             userData.username,
           );
           userId = user.chatId;
+          this.analyticsService
+            .track({
+              chatId: user.chatId,
+              userId: user.id,
+              eventType: 'webapp:support_requests',
+              payload: null,
+              source: 'webapp',
+            })
+            .catch(() => {});
         } else {
           if (dto.userId) {
             userId = dto.userId;
