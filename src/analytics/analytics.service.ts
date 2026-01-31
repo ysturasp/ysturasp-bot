@@ -5,6 +5,7 @@ import {
   BotEvent,
   BotEventSource,
 } from '../database/entities/bot-event.entity';
+import { User } from '../database/entities/user.entity';
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -82,6 +83,8 @@ export class AnalyticsService {
   constructor(
     @InjectRepository(BotEvent)
     private readonly eventRepository: Repository<BotEvent>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async track(params: TrackEventParams): Promise<void> {
@@ -202,21 +205,18 @@ export class AnalyticsService {
     const end = endOfMonth(month);
     const summary = await this.getSummary(start, end);
 
-    const newUsersRaw = await this.eventRepository.query(
-      `SELECT COUNT(*)::int AS count FROM (
-        SELECT chat_id FROM bot_events
-        GROUP BY chat_id
-        HAVING MIN(created_at) >= $1 AND MIN(created_at) <= $2
-      ) t`,
-      [start, end],
-    );
-    const newUsers = Number(newUsersRaw?.[0]?.count ?? 0);
+    const newUsers = await this.userRepository
+      .createQueryBuilder('u')
+      .select('COUNT(*)', 'count')
+      .where('u.createdAt >= :start', { start })
+      .andWhere('u.createdAt <= :end', { end })
+      .getRawOne<{ count: string }>();
 
     return {
       month: formatMonthRu(month),
       mau: summary.uniqueUsers,
       totalEvents: summary.totalEvents,
-      newUsers,
+      newUsers: parseInt(newUsers?.count ?? '0', 10),
       topEvents: summary.eventsByType.slice(0, 15),
       dailyBreakdown: summary.dailyActiveUsers.map((d) => ({
         date: d.date,
