@@ -7,6 +7,7 @@ import { Telegraf } from 'telegraf';
 import { Subscription } from '../database/entities/subscription.entity';
 import { ScheduleService } from '../schedule/schedule.service';
 import { getLessonTypeName } from '../helpers/schedule-formatter';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class NotificationsService {
@@ -17,6 +18,7 @@ export class NotificationsService {
     private readonly subscriptionRepository: Repository<Subscription>,
     private readonly scheduleService: ScheduleService,
     @InjectBot() private readonly bot: Telegraf,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   private normalizeGroupName(groupName: string): string {
@@ -96,6 +98,12 @@ ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`;
 
     try {
       await this.bot.telegram.sendMessage(sub.user.chatId, message);
+      await this.analyticsService.track({
+        chatId: sub.user.chatId,
+        userId: sub.user.id,
+        eventType: 'notification:lesson',
+        payload: { lessonName: lesson.lessonName },
+      });
     } catch (e) {
       this.logger.error(`Failed to send notification to ${sub.id}`, e);
     }

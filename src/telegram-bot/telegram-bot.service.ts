@@ -769,6 +769,10 @@ export class TelegramBotService {
       'user:start': 'старт бота',
       'user:help': 'справка',
       'referral:create': 'переход по реферальной ссылке',
+      'notification:grade': 'уведомление об оценках',
+      'notification:exam_new': 'уведомление о новом экзамене',
+      'notification:exam_changed': 'уведомление об изменении экзамена',
+      'notification:lesson': 'уведомление о занятии',
     };
 
     try {

@@ -8,6 +8,7 @@ import { Exam } from '../database/entities/exam.entity';
 import { Subscription } from '../database/entities/subscription.entity';
 import { ScheduleService } from '../schedule/schedule.service';
 import { getLessonTypeName } from '../helpers/schedule-formatter';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class ExamNotificationsService {
@@ -20,6 +21,7 @@ export class ExamNotificationsService {
     private readonly subscriptionRepository: Repository<Subscription>,
     private readonly scheduleService: ScheduleService,
     @InjectBot() private readonly bot: Telegraf,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   private normalizeGroupName(groupName: string): string {
@@ -137,6 +139,15 @@ export class ExamNotificationsService {
       try {
         await this.bot.telegram.sendMessage(chatId, msg, {
           parse_mode: 'HTML',
+        });
+        await this.analyticsService.track({
+          chatId,
+          userId: sub.user?.id,
+          eventType:
+            mode === 'new'
+              ? 'notification:exam_new'
+              : 'notification:exam_changed',
+          payload: { examId: exam.id },
         });
       } catch (e) {
         this.logger.error(`Failed to send exam notification to ${chatId}`, e);

@@ -7,6 +7,7 @@ import { Telegraf } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import { User } from '../database/entities/user.entity';
 import { createHash, createDecipheriv, randomBytes } from 'crypto';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 interface YSTUMark {
   inDiplom: number;
@@ -39,6 +40,7 @@ export class GradeNotificationsService {
     private readonly dataSource: DataSource,
     @InjectBot() private readonly bot: Telegraf,
     private readonly configService: ConfigService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   private getEncryptionKey(): Buffer {
@@ -323,6 +325,15 @@ export class GradeNotificationsService {
         try {
           await this.bot.telegram.sendMessage(user.chatId, message, {
             parse_mode: 'HTML',
+          });
+          await this.analyticsService.track({
+            chatId: user.chatId,
+            userId: user.id,
+            eventType: 'notification:grade',
+            payload: {
+              addedCount: changes.added.length,
+              changedCount: changes.changed.length,
+            },
           });
           this.logger.log(
             `Grade notification sent to user ${user.id} (chatId: ${user.chatId})`,
