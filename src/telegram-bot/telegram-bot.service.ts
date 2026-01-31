@@ -754,6 +754,23 @@ export class TelegramBotService {
 
     const loadingMsg = await ctx.reply('⏳ Формирую отчёт...');
 
+    const eventNamesRu: Record<string, string> = {
+      'schedule_view:week': 'расписание | неделя',
+      'schedule_view:quick_view': 'fast check расписания',
+      'schedule_view:today': 'расписание | сегодня',
+      'schedule_view:tomorrow': 'расписание | завтра',
+      'schedule_view:exams': 'просмотр экзаменов',
+      'schedule_view:day': 'просмотр расписания на день',
+      'subscription:create': 'создание подписки',
+      'subscription:delete': 'удаление подписки',
+      'subscription:list': 'просмотр подписок',
+      'support:message': 'сообщение в поддержку',
+      'poll:answer': 'ответ на опрос',
+      'user:start': 'старт бота',
+      'user:help': 'справка',
+      'referral:create': 'переход по реферальной ссылке',
+    };
+
     try {
       const [summary7, summary30, reportMonth, totalUsers] = await Promise.all([
         this.analyticsService.getLastDaysSummary(7),
@@ -784,7 +801,8 @@ export class TelegramBotService {
       ];
 
       reportMonth.topEvents.slice(0, 8).forEach((e, i) => {
-        lines.push(`  ${i + 1}. ${e.eventType}: ${e.count}`);
+        const eventName = eventNamesRu[e.eventType] || e.eventType;
+        lines.push(`  ${i + 1}. ${eventName}: ${e.count}`);
       });
 
       await ctx.telegram.editMessageText(
