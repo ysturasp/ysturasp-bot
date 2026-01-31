@@ -752,7 +752,7 @@ export class TelegramBotService {
       return;
     }
 
-    await ctx.reply('⏳ Формирую отчёт...');
+    const loadingMsg = await ctx.reply('⏳ Формирую отчёт...');
 
     try {
       const [summary7, summary30, reportMonth, totalUsers] = await Promise.all([
@@ -787,10 +787,24 @@ export class TelegramBotService {
         lines.push(`  ${i + 1}. ${e.eventType}: ${e.count}`);
       });
 
-      await ctx.reply(lines.join('\n'));
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        loadingMsg.message_id,
+        undefined,
+        lines.join('\n'),
+      );
     } catch (err) {
       this.logger.error('Analytics report failed', err);
-      await ctx.reply('❌ Не удалось сформировать отчёт. Проверьте логи.');
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          loadingMsg.message_id,
+          undefined,
+          '❌ Не удалось сформировать отчёт. Проверьте логи.',
+        );
+      } catch {
+        await ctx.reply('❌ Не удалось сформировать отчёт. Проверьте логи.');
+      }
     }
   }
 
