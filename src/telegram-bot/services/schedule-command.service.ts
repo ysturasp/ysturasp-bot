@@ -652,6 +652,18 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание преподавателя не найдено.');
       return;
     }
+
+    const chatId = String(ctx.chat?.id || '');
+    const user = await this.userHelperService.getUser(ctx).catch(() => null);
+    await this.analyticsService
+      .track({
+        chatId,
+        userId: user?.id || null,
+        eventType: 'schedule_view:teacher_day',
+        payload: { teacherId, dayOffset, teacher_name: schedule.groupName },
+        source: 'telegram',
+      })
+      .catch(() => {});
     const message = formatSchedule(schedule, dayOffset, '', 0, 'teacher');
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
@@ -675,6 +687,18 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание преподавателя не найдено.');
       return;
     }
+
+    const chatId = String(ctx.chat?.id || '');
+    const user = await this.userHelperService.getUser(ctx).catch(() => null);
+    await this.analyticsService
+      .track({
+        chatId,
+        userId: user?.id || null,
+        eventType: 'schedule_view:teacher_week',
+        payload: { teacherId, weekOffset, teacher_name: schedule.groupName },
+        source: 'telegram',
+      })
+      .catch(() => {});
     const message = formatSchedule(schedule, 'week', '', weekOffset, 'teacher');
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
@@ -709,6 +733,18 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание аудитории не найдено.');
       return;
     }
+
+    const chatId = String(ctx.chat?.id || '');
+    const user = await this.userHelperService.getUser(ctx).catch(() => null);
+    await this.analyticsService
+      .track({
+        chatId,
+        userId: user?.id || null,
+        eventType: 'schedule_view:audience_day',
+        payload: { audienceId, dayOffset, audience_name: schedule.groupName },
+        source: 'telegram',
+      })
+      .catch(() => {});
     const message = formatSchedule(schedule, dayOffset, '', 0, 'audience');
     const backAction = query
       ? `quick_select_audience:${audienceId}:${query}`
@@ -732,6 +768,18 @@ export class ScheduleCommandService {
       await ctx.editMessageText('❌ Расписание аудитории не найдено.');
       return;
     }
+
+    const chatId = String(ctx.chat?.id || '');
+    const user = await this.userHelperService.getUser(ctx).catch(() => null);
+    await this.analyticsService
+      .track({
+        chatId,
+        userId: user?.id || null,
+        eventType: 'schedule_view:audience_week',
+        payload: { audienceId, weekOffset, audience_name: schedule.groupName },
+        source: 'telegram',
+      })
+      .catch(() => {});
     const message = formatSchedule(
       schedule,
       'week',
