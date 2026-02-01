@@ -392,6 +392,9 @@ export class TelegramBotService {
     } else if (source === 'main') {
       user.stateData = { backTarget: 'main' };
       await this.userRepository.save(user);
+    } else if (source === 'help') {
+      user.stateData = { backTarget: 'help' };
+      await this.userRepository.save(user);
     } else if (!user.stateData?.backTarget) {
       user.stateData = { backTarget: 'main' };
       await this.userRepository.save(user);
@@ -410,6 +413,9 @@ export class TelegramBotService {
       await this.userRepository.save(user);
     } else if (source === 'main') {
       user.stateData = { backTarget: 'main' };
+      await this.userRepository.save(user);
+    } else if (source === 'help') {
+      user.stateData = { backTarget: 'help' };
       await this.userRepository.save(user);
     }
     await this.supportService.handleSupportCommand(ctx, user);
@@ -538,6 +544,32 @@ export class TelegramBotService {
     await this.userRepository.save(user);
     if (backTarget === 'settings') {
       await this.subscriptionService.handleSubscriptions(ctx, user);
+    } else if (backTarget === 'help') {
+      const helpButtons = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            '🔔 Подписаться на группу',
+            'open_subscribe:help',
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '💬 Написать в поддержку',
+            'open_support:help',
+          ),
+        ],
+      ]);
+      try {
+        await ctx.editMessageText(
+          this.textHandlerService.getHelpMessage(),
+          helpButtons as any,
+        );
+      } catch (e) {
+        await ctx.reply(this.textHandlerService.getHelpMessage(), {
+          ...getMainKeyboard(),
+          ...helpButtons,
+        });
+      }
     } else if (backTarget === 'main') {
       const fromUser = ctx.from;
       const dbUser = user;
@@ -916,10 +948,26 @@ export class TelegramBotService {
         ]);
         await ctx.telegram.sendMessage(user.chatId, info, kb as any);
       }
-      await ctx.reply(
-        this.textHandlerService.getHelpMessage(),
-        getMainKeyboard(),
-      );
+      user.stateData = { backTarget: 'help' };
+      await this.userRepository.save(user);
+      const helpButtons = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            '🔔 Подписаться на группу',
+            'open_subscribe:help',
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '💬 Написать в поддержку',
+            'open_support:help',
+          ),
+        ],
+      ]);
+      await ctx.reply(this.textHandlerService.getHelpMessage(), {
+        ...getMainKeyboard(),
+        ...helpButtons,
+      });
     }
   }
 
