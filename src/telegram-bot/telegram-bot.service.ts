@@ -151,10 +151,13 @@ export class TelegramBotService {
     ];
 
     if (dbUser.isAdmin) {
-      mainButtons.push([
-        Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
-        Markup.button.callback('📢 Рассылка', 'open_broadcast'),
-      ]);
+      mainButtons.push(
+        [
+          Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
+          Markup.button.callback('📢 Рассылка', 'open_broadcast'),
+        ],
+        [Markup.button.callback('📊 Аналитика', 'open_analytics')],
+      );
     }
 
     message += `\n\n📚 ты можешь просто ввести:
@@ -467,6 +470,17 @@ export class TelegramBotService {
     );
   }
 
+  @Action('open_analytics')
+  async onOpenAnalytics(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта функция доступна только администраторам.');
+      return;
+    }
+    await this.onAnalytics(ctx);
+  }
+
   @Action(/^open_suggestion(?::(.+))?$/)
   async onOpenSuggestion(@Ctx() ctx: Context) {
     // @ts-ignore
@@ -598,10 +612,13 @@ export class TelegramBotService {
       ];
 
       if (dbUser.isAdmin) {
-        mainButtons.push([
-          Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
-          Markup.button.callback('📢 Рассылка', 'open_broadcast'),
-        ]);
+        mainButtons.push(
+          [
+            Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
+            Markup.button.callback('📢 Рассылка', 'open_broadcast'),
+          ],
+          [Markup.button.callback('📊 Аналитика', 'open_analytics')],
+        );
       }
 
       message += `\n\nТакже вы можете просто ввести название группы (например, ЦИС-33), чтобы посмотреть расписание или подписаться на уведомления.`;
