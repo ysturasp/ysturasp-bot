@@ -648,6 +648,15 @@ export class TelegramBotService {
     await this.supportService.prepareAdminReply(ctx, admin, targetChatId);
   }
 
+  @Action('user_reply_to_admin')
+  async onUserReplyToAdmin(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await ctx.answerCbQuery();
+    user.state = 'SUPPORT';
+    await this.userRepository.save(user);
+    await ctx.reply('💬 Напишите ваш ответ поддержке:');
+  }
+
   @Command('subscriptions')
   async onSubscriptions(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);

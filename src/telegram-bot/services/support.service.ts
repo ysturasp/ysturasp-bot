@@ -241,9 +241,14 @@ export class SupportService {
     replyText: string,
   ) {
     try {
+      const replyKeyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('💬 Ответить', 'user_reply_to_admin')],
+      ]);
+
       await ctx.telegram.sendMessage(
         targetChatId,
         '📩 Ответ от поддержки:\n' + replyText,
+        replyKeyboard,
       );
 
       const request = await this.supportRequestRepository.findOne({
@@ -307,8 +312,13 @@ export class SupportService {
     const replyText = user.stateData.replyText;
 
     try {
+      const replyKeyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('💬 Ответить', 'user_reply_to_admin')],
+      ]);
+
       await ctx.telegram.sendPhoto(targetChatId, fileId, {
         caption: '📩 Ответ от поддержки:\n' + replyText,
+        ...replyKeyboard,
       });
 
       const request = await this.supportRequestRepository.findOne({
