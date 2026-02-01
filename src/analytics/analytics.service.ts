@@ -156,11 +156,7 @@ export class AnalyticsService {
   }
 
   async getTotalUsers(): Promise<number> {
-    const result = await this.eventRepository
-      .createQueryBuilder('e')
-      .select('COUNT(DISTINCT e.chat_id)', 'count')
-      .getRawOne<{ count: string }>();
-    return parseInt(result?.count ?? '0', 10);
+    return await this.userRepository.count();
   }
 
   async getSummary(startDate: Date, endDate: Date): Promise<AnalyticsSummary> {
