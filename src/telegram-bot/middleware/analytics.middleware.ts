@@ -100,6 +100,28 @@ function getPayload(ctx: Context): Record<string, unknown> | null {
 
 @Injectable()
 export class AnalyticsMiddleware {
+  private readonly adminActionsToSkip = new Set([
+    'open_analytics',
+    'analytics_period',
+    'analytics_month',
+    'analytics_total',
+    'back_to_analytics_menu',
+    'open_createpoll',
+    'open_broadcast',
+    'admin_reply',
+  ]);
+
+  private readonly adminCommandsToSkip = new Set([
+    'analytics',
+    'createpoll',
+    'broadcast',
+    'reply',
+    'webreply',
+    'replyphoto',
+    'sendpoll',
+    'year_end_broadcast',
+  ]);
+
   constructor(
     private readonly analytics: AnalyticsService,
     private readonly userHelper: UserHelperService,
@@ -111,6 +133,20 @@ export class AnalyticsMiddleware {
 
     if (!chatId || !eventType) {
       return next();
+    }
+
+    if (eventType.startsWith('action:')) {
+      const action = eventType.split(':')[1];
+      if (this.adminActionsToSkip.has(action)) {
+        return next();
+      }
+    }
+
+    if (eventType.startsWith('command:')) {
+      const command = eventType.split(':')[1];
+      if (this.adminCommandsToSkip.has(command)) {
+        return next();
+      }
     }
 
     let userId: string | null = null;

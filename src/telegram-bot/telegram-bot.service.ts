@@ -808,9 +808,193 @@ export class TelegramBotService {
       return;
     }
 
-    const loadingMsg = await ctx.reply('⏳ Формирую отчёт...');
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📅 7 дней', 'analytics_period:7'),
+        Markup.button.callback('📅 30 дней', 'analytics_period:30'),
+      ],
+      [
+        Markup.button.callback('📆 Текущий месяц', 'analytics_month:0'),
+        Markup.button.callback('📆 Прошлый месяц', 'analytics_month:-1'),
+      ],
+      [Markup.button.callback('👥 Общая статистика', 'analytics_total')],
+    ]);
 
-    const eventNamesRu: Record<string, string> = {
+    const message = '📊 Аналитика бота\n\nВыберите период для просмотра:';
+
+    const isCallback = !!ctx.callbackQuery;
+    if (isCallback) {
+      try {
+        await ctx.editMessageText(message, keyboard);
+      } catch {
+        await ctx.reply(message, keyboard);
+      }
+    } else {
+      await ctx.reply(message, keyboard);
+    }
+  }
+
+  @Action(/^analytics_period:(\d+)$/)
+  async onAnalyticsPeriod(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.answerCbQuery('❌ Доступно только администраторам');
+      return;
+    }
+
+    await ctx.answerCbQuery('⏳ Загрузка...');
+    // @ts-ignore
+    const days = parseInt(ctx.match[1], 10);
+
+    const eventNamesRu = this.getEventNamesRu();
+
+    try {
+      const [summary, totalUsers] = await Promise.all([
+        this.analyticsService.getLastDaysSummary(days),
+        this.analyticsService.getTotalUsers(),
+      ]);
+
+      const lines: string[] = [
+        `📊 Аналитика за последние ${days} дней`,
+        '',
+        `👥 Всего пользователей в системе: ${totalUsers}`,
+        '',
+        `📈 За период:`,
+        `  • Событий: ${summary.totalEvents}`,
+        `  • Активных пользователей: ${summary.uniqueUsers}`,
+        '',
+        '🔥 Топ действий:',
+      ];
+
+      summary.eventsByType.slice(0, 10).forEach((e, i) => {
+        const eventName = eventNamesRu[e.eventType] || e.eventType;
+        lines.push(`  ${i + 1}. ${eventName}: ${e.count}`);
+      });
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('« Назад', 'back_to_analytics_menu')],
+      ]);
+
+      await ctx.editMessageText(lines.join('\n'), keyboard);
+    } catch (err) {
+      this.logger.error('Analytics period failed', err);
+      await ctx.editMessageText('❌ Не удалось сформировать отчёт.');
+    }
+  }
+
+  @Action(/^analytics_month:(-?\d+)$/)
+  async onAnalyticsMonth(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.answerCbQuery('❌ Доступно только администраторам');
+      return;
+    }
+
+    await ctx.answerCbQuery('⏳ Загрузка...');
+    // @ts-ignore
+    const offset = parseInt(ctx.match[1], 10);
+
+    const eventNamesRu = this.getEventNamesRu();
+
+    try {
+      const now = new Date();
+      const targetDate = new Date(
+        now.getFullYear(),
+        now.getMonth() + offset,
+        1,
+      );
+
+      const [reportMonth, totalUsers] = await Promise.all([
+        this.analyticsService.getMonthlyReport(targetDate),
+        this.analyticsService.getTotalUsers(),
+      ]);
+
+      const lines: string[] = [
+        `📊 Аналитика за ${reportMonth.month}`,
+        '',
+        `👥 Всего пользователей в системе: ${totalUsers}`,
+        '',
+        `📈 За месяц:`,
+        `  • MAU: ${reportMonth.mau}`,
+        `  • Событий: ${reportMonth.totalEvents}`,
+        `  • Новых пользователей: ${reportMonth.newUsers}`,
+        '',
+        '🔥 Топ действий:',
+      ];
+
+      reportMonth.topEvents.slice(0, 10).forEach((e, i) => {
+        const eventName = eventNamesRu[e.eventType] || e.eventType;
+        lines.push(`  ${i + 1}. ${eventName}: ${e.count}`);
+      });
+
+      const navButtons = [];
+      navButtons.push(
+        Markup.button.callback(
+          '👈 Пред. месяц',
+          `analytics_month:${offset - 1}`,
+        ),
+      );
+      if (offset < 0) {
+        navButtons.push(
+          Markup.button.callback(
+            'След. месяц 👉',
+            `analytics_month:${offset + 1}`,
+          ),
+        );
+      }
+
+      const keyboard = Markup.inlineKeyboard([
+        navButtons,
+        [Markup.button.callback('« Назад', 'back_to_analytics_menu')],
+      ]);
+
+      await ctx.editMessageText(lines.join('\n'), keyboard);
+    } catch (err) {
+      this.logger.error('Analytics month failed', err);
+      await ctx.editMessageText('❌ Не удалось сформировать отчёт.');
+    }
+  }
+
+  @Action('analytics_total')
+  async onAnalyticsTotal(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.answerCbQuery('❌ Доступно только администраторам');
+      return;
+    }
+
+    await ctx.answerCbQuery('⏳ Загрузка...');
+
+    try {
+      const totalUsers = await this.analyticsService.getTotalUsers();
+
+      const lines: string[] = [
+        '📊 Общая статистика',
+        '',
+        `👥 Всего уникальных пользователей: ${totalUsers}`,
+        '',
+        'ℹ️ Для детальной статистики выберите период.',
+      ];
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('« Назад', 'back_to_analytics_menu')],
+      ]);
+
+      await ctx.editMessageText(lines.join('\n'), keyboard);
+    } catch (err) {
+      this.logger.error('Analytics total failed', err);
+      await ctx.editMessageText('❌ Не удалось сформировать отчёт.');
+    }
+  }
+
+  @Action('back_to_analytics_menu')
+  async onBackToAnalyticsMenu(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    await this.onAnalytics(ctx);
+  }
+
+  private getEventNamesRu(): Record<string, string> {
+    return {
       'schedule_view:week': 'расписание | неделя',
       'schedule_view:quick_view': 'fast check расписания',
       'schedule_view:today': 'расписание | сегодня',
@@ -834,60 +1018,6 @@ export class TelegramBotService {
       'notification:exam_changed': 'уведомление об изменении экзамена',
       'notification:lesson': 'уведомление о занятии',
     };
-
-    try {
-      const [summary7, summary30, reportMonth, totalUsers] = await Promise.all([
-        this.analyticsService.getLastDaysSummary(7),
-        this.analyticsService.getLastDaysSummary(30),
-        this.analyticsService.getCurrentMonthReport(),
-        this.analyticsService.getTotalUsers(),
-      ]);
-
-      const lines: string[] = [
-        '📊 Аналитика бота',
-        '',
-        '👥 Всего уникальных пользователей (все время): ' + totalUsers,
-        '',
-        '📅 За последние 7 дней:',
-        `  • Событий: ${summary7.totalEvents}`,
-        `  • Активных пользователей: ${summary7.uniqueUsers}`,
-        '',
-        '📅 За последние 30 дней:',
-        `  • Событий: ${summary30.totalEvents}`,
-        `  • Активных пользователей: ${summary30.uniqueUsers}`,
-        '',
-        `📆 Текущий месяц (${reportMonth.month}):`,
-        `  • MAU: ${reportMonth.mau}`,
-        `  • Событий: ${reportMonth.totalEvents}`,
-        `  • Новых пользователей: ${reportMonth.newUsers}`,
-        '',
-        '🔥 Топ действий за месяц:',
-      ];
-
-      reportMonth.topEvents.slice(0, 8).forEach((e, i) => {
-        const eventName = eventNamesRu[e.eventType] || e.eventType;
-        lines.push(`  ${i + 1}. ${eventName}: ${e.count}`);
-      });
-
-      await ctx.telegram.editMessageText(
-        ctx.chat.id,
-        loadingMsg.message_id,
-        undefined,
-        lines.join('\n'),
-      );
-    } catch (err) {
-      this.logger.error('Analytics report failed', err);
-      try {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id,
-          loadingMsg.message_id,
-          undefined,
-          '❌ Не удалось сформировать отчёт. Проверьте логи.',
-        );
-      } catch {
-        await ctx.reply('❌ Не удалось сформировать отчёт. Проверьте логи.');
-      }
-    }
   }
 
   @On('text')
