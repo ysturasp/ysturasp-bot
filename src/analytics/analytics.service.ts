@@ -6,6 +6,7 @@ import {
   BotEventSource,
 } from '../database/entities/bot-event.entity';
 import { User } from '../database/entities/user.entity';
+import { Subscription } from '../database/entities/subscription.entity';
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -76,6 +77,15 @@ export interface MonthlyReport {
   }>;
 }
 
+export interface UserEngagement {
+  totalUsers: number;
+  engagedUsers: number;
+  engagementRate: number;
+  usersWithPreferredGroup: number;
+  usersWithSubscriptions: number;
+  usersWithBoth: number;
+}
+
 @Injectable()
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
@@ -85,6 +95,8 @@ export class AnalyticsService {
     private readonly eventRepository: Repository<BotEvent>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionRepository: Repository<Subscription>,
   ) {}
 
   async track(params: TrackEventParams): Promise<void> {
@@ -234,5 +246,53 @@ export class AnalyticsService {
 
   async getCurrentMonthReport(): Promise<MonthlyReport> {
     return this.getMonthlyReport(new Date());
+  }
+
+  async getUserEngagement(): Promise<UserEngagement> {
+    const totalUsers = await this.userRepository.count();
+
+    const usersWithPreferredGroup = await this.userRepository
+      .createQueryBuilder('u')
+      .where('u.preferredGroup IS NOT NULL')
+      .andWhere("u.preferredGroup != ''")
+      .getCount();
+
+    const userIdsWithSubscriptions = await this.subscriptionRepository
+      .createQueryBuilder('s')
+      .select('DISTINCT s.userId', 'userId')
+      .where('s.isActive = :isActive', { isActive: true })
+      .getRawMany<{ userId: string }>();
+
+    const usersWithSubscriptions = userIdsWithSubscriptions.length;
+
+    const usersWithBoth = await this.userRepository
+      .createQueryBuilder('u')
+      .innerJoin(
+        'subscriptions',
+        's',
+        's.userId = u.id AND s.isActive = :isActive',
+        { isActive: true },
+      )
+      .where('u.preferredGroup IS NOT NULL')
+      .andWhere("u.preferredGroup != ''")
+      .select('COUNT(DISTINCT u.id)', 'count')
+      .getRawOne<{ count: string }>();
+
+    const engagedUsers =
+      usersWithPreferredGroup +
+      usersWithSubscriptions -
+      parseInt(usersWithBoth?.count ?? '0', 10);
+
+    const engagementRate =
+      totalUsers > 0 ? (engagedUsers / totalUsers) * 100 : 0;
+
+    return {
+      totalUsers,
+      engagedUsers,
+      engagementRate: Math.round(engagementRate * 100) / 100,
+      usersWithPreferredGroup,
+      usersWithSubscriptions,
+      usersWithBoth: parseInt(usersWithBoth?.count ?? '0', 10),
+    };
   }
 }

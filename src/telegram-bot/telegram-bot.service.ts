@@ -954,7 +954,7 @@ export class TelegramBotService {
       const lines: string[] = [
         `📊 Аналитика за последние ${days} дней`,
         '',
-        `👥 Всего пользователей в системе: ${totalUsers}`,
+        `👥 Всего пользователей: ${totalUsers}`,
         '',
         `📈 За период:`,
         `  • Событий: ${summary.totalEvents}`,
@@ -1001,27 +1001,29 @@ export class TelegramBotService {
         1,
       );
 
-      const [reportMonth, totalUsers] = await Promise.all([
+      const [reportMonth, totalUsers, engagement] = await Promise.all([
         this.analyticsService.getMonthlyReport(targetDate),
         this.analyticsService.getTotalUsers(),
+        this.analyticsService.getUserEngagement(),
       ]);
 
       const lines: string[] = [
         `📊 Аналитика за ${reportMonth.month}`,
         '',
-        `👥 Всего пользователей в системе: ${totalUsers}`,
+        `👥 Всего пользователей: ${totalUsers}`,
+        `📈 С подпиской: ${engagement.engagedUsers} (${engagement.engagementRate}%)`,
         '',
-        `📈 За месяц:`,
-        `  • MAU: ${reportMonth.mau}`,
-        `  • Событий: ${reportMonth.totalEvents}`,
-        `  • Новых пользователей: ${reportMonth.newUsers}`,
+        `🗓️ За месяц:`,
+        `• MAU: ${reportMonth.mau}`,
+        `• Событий: ${reportMonth.totalEvents}`,
+        `• Новых пользователей: ${reportMonth.newUsers}`,
         '',
         '🔥 Топ действий:',
       ];
 
       reportMonth.topEvents.slice(0, 10).forEach((e, i) => {
         const eventName = eventNamesRu[e.eventType] || e.eventType;
-        lines.push(`  ${i + 1}. ${eventName}: ${e.count}`);
+        lines.push(`${i + 1}. ${eventName}: ${e.count}`);
       });
 
       const navButtons = [];
@@ -1063,12 +1065,16 @@ export class TelegramBotService {
     await ctx.answerCbQuery('⏳ Загрузка...');
 
     try {
-      const totalUsers = await this.analyticsService.getTotalUsers();
+      const [totalUsers, engagement] = await Promise.all([
+        this.analyticsService.getTotalUsers(),
+        this.analyticsService.getUserEngagement(),
+      ]);
 
       const lines: string[] = [
         '📊 Общая статистика',
         '',
         `👥 Всего уникальных пользователей: ${totalUsers}`,
+        `📈 С подпиской: ${engagement.engagedUsers} (${engagement.engagementRate}%)`,
         '',
         'ℹ️ Для детальной статистики выберите период.',
       ];
