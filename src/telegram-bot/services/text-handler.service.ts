@@ -250,9 +250,70 @@ export class TextHandlerService {
     }
 
     const teachers = await this.scheduleService.getTeachers();
-    const matchingTeachers = teachers.filter((t) =>
-      t.name.toLowerCase().includes(text.toLowerCase().trim()),
-    );
+    const searchQuery = text.toLowerCase().trim();
+
+    const matchingTeachers = teachers.filter((t) => {
+      const teacherName = t.name.toLowerCase();
+
+      if (teacherName.includes(searchQuery)) {
+        return true;
+      }
+
+      const parts = teacherName.split(' ');
+      if (parts.length >= 2) {
+        const surname = parts[0];
+        const name = parts[1];
+        const patronymic = parts[2] || '';
+
+        const nameInitial = name.charAt(0);
+        const patronymicInitial = patronymic ? patronymic.charAt(0) : '';
+
+        const cleanQuery = searchQuery.replace(/[\s.]/g, '');
+
+        const variants = [
+          `${surname}${nameInitial}.${patronymicInitial}.`,
+          `${surname}${nameInitial}.${patronymicInitial}`,
+          `${surname}${nameInitial}.`,
+          `${nameInitial}.${patronymicInitial}.${surname}`,
+          `${nameInitial}.${patronymicInitial}${surname}`,
+          `${nameInitial}.${surname}`,
+          `${surname}${nameInitial}${patronymicInitial}`,
+          `${surname}${nameInitial}`,
+          `${nameInitial}${patronymicInitial}${surname}`,
+          `${nameInitial}${surname}`,
+        ];
+
+        if (
+          variants.some(
+            (v) => v.replace(/[\s.]/g, '').toLowerCase() === cleanQuery,
+          )
+        ) {
+          return true;
+        }
+
+        const queryParts = searchQuery.split(/\s+/);
+        if (queryParts.length === 2) {
+          const [part1, part2] = queryParts;
+          const clean1 = part1.replace(/\./g, '');
+          const clean2 = part2.replace(/\./g, '');
+
+          const checks = [
+            surname.startsWith(clean1) &&
+              clean2.length <= 2 &&
+              nameInitial.startsWith(clean2.charAt(0)),
+            surname.startsWith(clean2) &&
+              clean1.length <= 2 &&
+              nameInitial.startsWith(clean1.charAt(0)),
+          ];
+
+          if (checks.some((c) => c)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    });
 
     if (matchingTeachers.length === 1) {
       const teacher = matchingTeachers[0];
