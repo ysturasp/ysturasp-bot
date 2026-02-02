@@ -7,10 +7,11 @@ import { Subscription } from '../../database/entities/subscription.entity';
 import { Exam } from '../../database/entities/exam.entity';
 import { ScheduleService } from '../../schedule/schedule.service';
 import { formatSchedule } from '../../helpers/schedule-formatter';
-import { StatisticsService } from './statistics.service';
+import { StatisticsService, InstituteId } from './statistics.service';
 import { normalizeAudienceName } from '../../helpers/group-normalizer';
 import { AnalyticsService } from '../../analytics/analytics.service';
 import { UserHelperService } from './user-helper.service';
+import { getFooterLinks } from '../../config/links.config';
 
 @Injectable()
 export class ScheduleCommandService {
@@ -29,10 +30,35 @@ export class ScheduleCommandService {
     private readonly userHelperService: UserHelperService,
   ) {}
 
-  async handleExams(ctx: Context, userId: string): Promise<void> {
+  private addFooterLinks(
+    message: string,
+    parseMode: 'Markdown' | 'HTML' = 'Markdown',
+  ): string {
+    return message + getFooterLinks(parseMode);
+  }
+
+  private async replyWithFooter(
+    ctx: Context,
+    message: string,
+    extra?: any,
+  ): Promise<any> {
+    const parseMode = extra?.parse_mode || 'Markdown';
+    const messageWithFooter = this.addFooterLinks(message, parseMode);
+    return ctx.reply(messageWithFooter, {
+      parse_mode: parseMode,
+      link_preview_options: { is_disabled: true },
+      ...extra,
+    });
+  }
+
+  async handleExams(
+    ctx: Context,
+    userId: string,
+    groupIndex = 0,
+  ): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      await ctx.reply('❌ Пользователь не найден.');
+      await this.replyWithFooter(ctx, '❌ Пользователь не найден.');
       return;
     }
 
@@ -60,7 +86,8 @@ export class ScheduleCommandService {
           ),
         ],
       ]);
-      await ctx.reply(
+      await this.replyWithFooter(
+        ctx,
         '❌ У вас нет активных подписок.\n\nВы можете подписаться на уведомления или выбрать группу для просмотра расписания.',
         keyboard,
       );
@@ -76,9 +103,11 @@ export class ScheduleCommandService {
       });
     };
 
-    let foundAny = false;
-    let msg = '';
-    const groupsShown: string[] = [];
+    const groupsWithExams: Array<{
+      groupName: string;
+      exams: any[];
+      institute: InstituteId | null;
+    }> = [];
 
     for (const sub of subs) {
       const normalizedGroupName = sub.groupName.trim().toUpperCase();
@@ -90,63 +119,20 @@ export class ScheduleCommandService {
         .orderBy('exam.date', 'ASC')
         .getMany();
 
-      if (!exams.length) {
-        continue;
+      if (exams.length > 0) {
+        const institute = await this.statisticsService.getInstituteByGroup(
+          sub.groupName,
+        );
+        groupsWithExams.push({
+          groupName: sub.groupName,
+          exams,
+          institute,
+        });
       }
-      foundAny = true;
-      groupsShown.push(sub.groupName);
-      msg += `🎓 <b>Экзамены для группы ${sub.groupName}</b>\n\n`;
-
-      const institute = await this.statisticsService.getInstituteByGroup(
-        sub.groupName,
-      );
-
-      for (const exam of exams) {
-        msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
-
-        if (institute) {
-          try {
-            const matchingDiscipline =
-              await this.statisticsService.findMatchingDiscipline(
-                institute,
-                exam.lessonName,
-              );
-
-            if (matchingDiscipline) {
-              const statistics =
-                await this.statisticsService.getSubjectStatistics(
-                  institute,
-                  matchingDiscipline,
-                );
-
-              if (statistics && statistics.totalCount > 0) {
-                const avgScore = statistics.average.toFixed(2);
-                const statsUrl = this.statisticsService.getStatisticsUrl(
-                  institute,
-                  matchingDiscipline,
-                );
-                msg += `📊 Средний балл: <a href="${statsUrl}">${avgScore} (${statistics.totalCount} оценок)</a>\n`;
-              }
-            }
-          } catch (error) {
-            this.logger.error(
-              `Error fetching statistics for ${exam.lessonName}:`,
-              error,
-            );
-          }
-        } else {
-          this.logger.debug(`No institute found for group: ${sub.groupName}`);
-        }
-
-        msg += '\n';
-      }
-      msg += '\n';
     }
 
     if (preferredGroupOnly) {
       const groupName = user.preferredGroup;
-      const normalizedGroupName = groupName.trim().toUpperCase();
-
       const schedule = await this.scheduleService.getSchedule(groupName);
       const exams = this.extractExamsFromSchedule(schedule);
 
@@ -157,97 +143,135 @@ export class ScheduleCommandService {
           return dateA - dateB;
         });
 
-        foundAny = true;
-        groupsShown.push(groupName);
-        msg += `🎓 <b>Экзамены для группы ${groupName}</b>\n\n`;
-
         const institute =
           await this.statisticsService.getInstituteByGroup(groupName);
+        groupsWithExams.push({
+          groupName,
+          exams,
+          institute,
+        });
+      }
+    }
 
-        for (const exam of exams) {
-          msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
+    if (groupsWithExams.length === 0) {
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
+      ]);
+      const message = 'Экзамены для ваших групп не найдены.';
+      // @ts-ignore
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(message, keyboard);
+      } else {
+        await this.replyWithFooter(ctx, message, keyboard);
+      }
+      return;
+    }
 
-          if (institute) {
-            try {
-              const matchingDiscipline =
-                await this.statisticsService.findMatchingDiscipline(
-                  institute,
-                  exam.lessonName,
-                );
+    const currentIndex = Math.max(
+      0,
+      Math.min(groupIndex, groupsWithExams.length - 1),
+    );
+    const currentGroup = groupsWithExams[currentIndex];
 
-              if (matchingDiscipline) {
-                const statistics =
-                  await this.statisticsService.getSubjectStatistics(
-                    institute,
-                    matchingDiscipline,
-                  );
+    let msg = `🎓 <b>Экзамены для группы ${currentGroup.groupName}</b>\n\n`;
 
-                if (statistics && statistics.totalCount > 0) {
-                  const avgScore = statistics.average.toFixed(2);
-                  const statsUrl = this.statisticsService.getStatisticsUrl(
-                    institute,
-                    matchingDiscipline,
-                  );
-                  msg += `📊 Средний балл: <a href="${statsUrl}">${avgScore} (${statistics.totalCount} оценок)</a>\n`;
-                }
-              }
-            } catch (error) {
-              this.logger.error(
-                `Error fetching statistics for ${exam.lessonName}:`,
-                error,
+    for (const exam of currentGroup.exams) {
+      msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
+
+      if (currentGroup.institute) {
+        try {
+          const matchingDiscipline =
+            await this.statisticsService.findMatchingDiscipline(
+              currentGroup.institute,
+              exam.lessonName,
+            );
+
+          if (matchingDiscipline) {
+            const statistics =
+              await this.statisticsService.getSubjectStatistics(
+                currentGroup.institute,
+                matchingDiscipline,
               );
+
+            if (statistics && statistics.totalCount > 0) {
+              const avgScore = statistics.average.toFixed(2);
+              const statsUrl = this.statisticsService.getStatisticsUrl(
+                currentGroup.institute,
+                matchingDiscipline,
+              );
+              msg += `📊 Средний балл: <a href="${statsUrl}">${avgScore} (${statistics.totalCount} оценок)</a>\n`;
             }
-          } else {
-            this.logger.debug(`No institute found for group: ${groupName}`);
           }
-
-          msg += '\n';
+        } catch (error) {
+          this.logger.error(
+            `Error fetching statistics for ${exam.lessonName}:`,
+            error,
+          );
         }
-        msg += '\n';
       }
+
+      msg += '\n';
     }
 
-    if (foundAny) {
-      const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
-      ]);
-      // @ts-ignore
-      if (ctx.callbackQuery) {
-        await ctx.editMessageText(msg.trim(), {
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          ...keyboard,
-        });
-      } else {
-        await ctx.reply(msg.trim(), {
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          ...keyboard,
-        });
-      }
-      this.analyticsService
-        .track({
-          chatId: user.chatId,
-          userId: user.id,
-          eventType: 'schedule_view:exams',
-          payload: { groups: groupsShown },
-          source: 'telegram',
-        })
-        .catch(() => {});
-    } else {
-      const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
-      ]);
-      // @ts-ignore
-      if (ctx.callbackQuery) {
-        await ctx.editMessageText(
-          'Экзамены для ваших групп не найдены.',
-          keyboard,
+    const buttons: any[] = [];
+
+    if (groupsWithExams.length > 1) {
+      const navRow: any[] = [];
+      if (currentIndex > 0) {
+        navRow.push(
+          Markup.button.callback(
+            '👈 Предыдущая',
+            `view_exams:${userId}:${currentIndex - 1}`,
+          ),
         );
-      } else {
-        await ctx.reply('Экзамены для ваших групп не найдены.', keyboard);
       }
+      if (currentIndex < groupsWithExams.length - 1) {
+        navRow.push(
+          Markup.button.callback(
+            'Следующая 👉',
+            `view_exams:${userId}:${currentIndex + 1}`,
+          ),
+        );
+      }
+      if (navRow.length > 0) {
+        buttons.push(navRow);
+      }
+
+      msg += `\n<i>Группа ${currentIndex + 1} из ${groupsWithExams.length}</i>`;
     }
+
+    buttons.push([Markup.button.callback('« Назад', 'back_to_schedule_menu')]);
+
+    const keyboard = Markup.inlineKeyboard(buttons);
+
+    // @ts-ignore
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(this.addFooterLinks(msg.trim(), 'HTML'), {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        ...keyboard,
+      });
+    } else {
+      await this.replyWithFooter(ctx, msg.trim(), {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        ...keyboard,
+      });
+    }
+
+    this.analyticsService
+      .track({
+        chatId: user.chatId,
+        userId: user.id,
+        eventType: 'schedule_view:exams',
+        payload: {
+          groupName: currentGroup.groupName,
+          groupIndex: currentIndex,
+          totalGroups: groupsWithExams.length,
+        },
+        source: 'telegram',
+      })
+      .catch(() => {});
   }
 
   private extractExamsFromSchedule(schedule: any): Array<{
@@ -324,7 +348,10 @@ export class ScheduleCommandService {
       [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
-    await ctx.editMessageText(message, keyboard);
+    await ctx.editMessageText(this.addFooterLinks(message), {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    });
 
     this.trackScheduleView(
       ctx,
@@ -364,7 +391,11 @@ export class ScheduleCommandService {
       [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
-    await ctx.editMessageText(message, keyboard);
+    await ctx.editMessageText(this.addFooterLinks(message), {
+      parse_mode: 'Markdown',
+      link_preview_options: { is_disabled: true },
+      ...keyboard,
+    });
 
     this.trackScheduleView(ctx, groupName, 'week', { weekOffset }).catch(
       () => {},
@@ -414,7 +445,7 @@ export class ScheduleCommandService {
   ): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      await ctx.reply('❌ Пользователь не найден.');
+      await this.replyWithFooter(ctx, '❌ Пользователь не найден.');
       return;
     }
 
@@ -440,7 +471,8 @@ export class ScheduleCommandService {
             ),
           ],
         ]);
-        await ctx.reply(
+        await this.replyWithFooter(
+          ctx,
           '❌ У вас нет активных подписок.\n\nВы можете подписаться на уведомления или выбрать группу для просмотра расписания.',
           keyboard,
         );
@@ -475,9 +507,13 @@ export class ScheduleCommandService {
       ]);
       // @ts-ignore
       if (ctx.callbackQuery) {
-        await ctx.editMessageText(message, keyboard);
+        await ctx.editMessageText(this.addFooterLinks(message), {
+          parse_mode: 'Markdown',
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        });
       } else {
-        await ctx.reply(message, keyboard);
+        await this.replyWithFooter(ctx, message, keyboard);
       }
       this.analyticsService
         .track({
@@ -503,13 +539,13 @@ export class ScheduleCommandService {
     ]);
     // @ts-ignore
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(message, {
-        parse_mode: 'HTML',
+      await ctx.editMessageText(this.addFooterLinks(message), {
+        parse_mode: 'Markdown',
         link_preview_options: { is_disabled: true },
         ...keyboard,
       });
     } else {
-      await ctx.reply(message, keyboard);
+      await this.replyWithFooter(ctx, message, keyboard);
     }
     const viewType =
       dayOffset === 0 ? 'today' : dayOffset === 1 ? 'tomorrow' : 'day';
@@ -610,7 +646,7 @@ export class ScheduleCommandService {
     if (matchingTeachers.length === 0) {
       const msg = '❌ Преподаватели не найдены.';
       if (isCallback) await ctx.editMessageText(msg);
-      else await ctx.reply(msg);
+      else await this.replyWithFooter(ctx, msg);
       return;
     }
 
@@ -675,7 +711,7 @@ export class ScheduleCommandService {
         ...Markup.inlineKeyboard(buttons),
       });
     } else {
-      await ctx.reply(message, {
+      await this.replyWithFooter(ctx, message, {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard(buttons),
       });
@@ -714,7 +750,11 @@ export class ScheduleCommandService {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(message, keyboard);
+    await ctx.editMessageText(this.addFooterLinks(message), {
+      parse_mode: 'Markdown',
+      link_preview_options: { is_disabled: true },
+      ...keyboard,
+    });
   }
 
   async handleTeacherWeek(
@@ -760,7 +800,11 @@ export class ScheduleCommandService {
       ],
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(message, keyboard);
+    await ctx.editMessageText(this.addFooterLinks(message), {
+      parse_mode: 'Markdown',
+      link_preview_options: { is_disabled: true },
+      ...keyboard,
+    });
   }
 
   async handleAudienceDay(
@@ -795,7 +839,11 @@ export class ScheduleCommandService {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(message, keyboard);
+    await ctx.editMessageText(this.addFooterLinks(message), {
+      parse_mode: 'Markdown',
+      link_preview_options: { is_disabled: true },
+      ...keyboard,
+    });
   }
 
   async handleAudienceWeek(
@@ -847,7 +895,11 @@ export class ScheduleCommandService {
       ],
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(message, keyboard);
+    await ctx.editMessageText(this.addFooterLinks(message), {
+      parse_mode: 'Markdown',
+      link_preview_options: { is_disabled: true },
+      ...keyboard,
+    });
   }
 
   async handleQuickSelectAudience(
@@ -920,7 +972,7 @@ export class ScheduleCommandService {
     if (matchingAudiences.length === 0) {
       const msg = '❌ Аудитории не найдены.';
       if (isCallback) await ctx.editMessageText(msg);
-      else await ctx.reply(msg);
+      else await this.replyWithFooter(ctx, msg);
       return;
     }
 
@@ -977,7 +1029,7 @@ export class ScheduleCommandService {
         ...Markup.inlineKeyboard(buttons),
       });
     } else {
-      await ctx.reply(message, {
+      await this.replyWithFooter(ctx, message, {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard(buttons),
       });

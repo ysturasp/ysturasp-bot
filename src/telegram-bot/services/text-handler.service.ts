@@ -10,6 +10,7 @@ import {
   findCanonicalGroupName,
   normalizeAudienceName,
 } from '../../helpers/group-normalizer';
+import { getFooterLinks } from '../../config/links.config';
 
 @Injectable()
 export class TextHandlerService {
@@ -350,13 +351,15 @@ export class TextHandlerService {
   }
 
   getHelpMessage(): string {
-    return `Не удалось распознать 🤔
+    return (
+      `Не удалось распознать 🤔
 
 Попробуйте ввести:
 • Название группы (например, ЦИС-33)
 • ФИО преподавателя (например, Иванов И.И.)
 • Номер аудитории (например, 633)
 
-Или используйте кнопки для навигации`;
+Или используйте кнопки для навигации` + getFooterLinks()
+    );
   }
 }

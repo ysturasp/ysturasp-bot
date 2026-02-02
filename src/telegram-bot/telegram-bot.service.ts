@@ -17,6 +17,7 @@ import { TextHandlerService } from './services/text-handler.service';
 import { YearEndBroadcastService } from './services/year-end-broadcast.service';
 import { ReferralService } from './services/referral.service';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { getFooterLinks } from '../config/links.config';
 
 @Update()
 @Injectable()
@@ -39,10 +40,28 @@ export class TelegramBotService {
     private readonly referralService: ReferralService,
     private readonly analyticsService: AnalyticsService,
   ) {}
+
+  private addFooterLinks(message: string): string {
+    return message + getFooterLinks();
+  }
+
+  private async replyWithFooter(
+    ctx: Context,
+    message: string,
+    extra?: any,
+  ): Promise<any> {
+    const messageWithFooter = this.addFooterLinks(message);
+    return ctx.reply(messageWithFooter, {
+      parse_mode: 'Markdown',
+      link_preview_options: { is_disabled: true },
+      ...extra,
+    });
+  }
+
   @Command('exams')
   async onExams(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
-    await this.scheduleCommandService.handleExams(ctx, user.id);
+    await this.scheduleCommandService.handleExams(ctx, user.id, 0);
   }
 
   @Start()
@@ -57,7 +76,8 @@ export class TelegramBotService {
     if (startPayload) {
       if (dbUser.picture) {
         referralProcessed = true;
-        await ctx.reply(
+        await this.replyWithFooter(
+          ctx,
           '⚠️ Вы уже пользовались мини-приложением ранее. Реферальные коды можно применять только при первом использовании бота.',
         );
       } else {
@@ -89,7 +109,7 @@ export class TelegramBotService {
                 ],
               ];
 
-              await ctx.reply(referralMessage, {
+              await this.replyWithFooter(ctx, referralMessage, {
                 ...getMainKeyboard(),
                 ...Markup.inlineKeyboard(referralButtons),
               });
@@ -100,18 +120,21 @@ export class TelegramBotService {
             }
           } else {
             referralProcessed = true;
-            await ctx.reply(
+            await this.replyWithFooter(
+              ctx,
               'ℹ️ Вы уже были приглашены по реферальной ссылке ранее.',
             );
           }
         } else if (referrerUser && referrerUser.id === dbUser.id) {
           referralProcessed = true;
-          await ctx.reply(
+          await this.replyWithFooter(
+            ctx,
             '⚠️ Вы не можете пригласить самого себя по реферальной ссылке.',
           );
         } else if (!referrerUser) {
           referralProcessed = true;
-          await ctx.reply(
+          await this.replyWithFooter(
+            ctx,
             '⚠️ Реферальная ссылка недействительна. Пользователь, который вас пригласил, не найден.',
           );
         }
@@ -169,7 +192,7 @@ export class TelegramBotService {
 
 💬 Также у нас есть телеграм-канал с новостями и обновлениями — @ysturasp`;
 
-    await ctx.reply(message, {
+    await this.replyWithFooter(ctx, message, {
       ...getMainKeyboard(),
       ...Markup.inlineKeyboard(mainButtons),
     });
@@ -395,7 +418,17 @@ export class TelegramBotService {
   async onShowExams(@Ctx() ctx: Context) {
     await ctx.answerCbQuery();
     const user = await this.userHelperService.getUser(ctx);
-    await this.scheduleCommandService.handleExams(ctx, user.id);
+    await this.scheduleCommandService.handleExams(ctx, user.id, 0);
+  }
+
+  @Action(/^view_exams:(.+):(\d+)$/)
+  async onViewExams(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    // @ts-ignore
+    const userId = ctx.match[1];
+    // @ts-ignore
+    const groupIndex = parseInt(ctx.match[2]);
+    await this.scheduleCommandService.handleExams(ctx, userId, groupIndex);
   }
 
   @Action('back_to_schedule_menu')
@@ -487,7 +520,10 @@ export class TelegramBotService {
     const user = await this.userHelperService.getUser(ctx);
     await ctx.answerCbQuery();
     if (!user.isAdmin) {
-      await ctx.reply('❌ Эта функция доступна только администраторам.');
+      await this.replyWithFooter(
+        ctx,
+        '❌ Эта функция доступна только администраторам.',
+      );
       return;
     }
     user.state = 'BROADCAST';
@@ -508,7 +544,8 @@ export class TelegramBotService {
         return;
       } catch (e) {}
     }
-    await ctx.reply(
+    await this.replyWithFooter(
+      ctx,
       'Отправьте текст для рассылки или пришлите фото/видео с подписью. После отправки рассылка будет выполнена.',
       kb2 as any,
     );
@@ -519,7 +556,10 @@ export class TelegramBotService {
     const user = await this.userHelperService.getUser(ctx);
     await ctx.answerCbQuery();
     if (!user.isAdmin) {
-      await ctx.reply('❌ Эта функция доступна только администраторам.');
+      await this.replyWithFooter(
+        ctx,
+        '❌ Эта функция доступна только администраторам.',
+      );
       return;
     }
     await this.onAnalytics(ctx);
@@ -618,15 +658,19 @@ export class TelegramBotService {
         ],
       ]);
       try {
-        await ctx.editMessageText(
-          this.textHandlerService.getHelpMessage(),
-          helpButtons as any,
-        );
-      } catch (e) {
-        await ctx.reply(this.textHandlerService.getHelpMessage(), {
-          ...getMainKeyboard(),
+        await ctx.editMessageText(this.textHandlerService.getHelpMessage(), {
+          parse_mode: 'Markdown',
           ...helpButtons,
-        });
+        } as any);
+      } catch (e) {
+        await this.replyWithFooter(
+          ctx,
+          this.textHandlerService.getHelpMessage(),
+          {
+            ...getMainKeyboard(),
+            ...helpButtons,
+          },
+        );
       }
     } else if (backTarget === 'main') {
       const fromUser = ctx.from;
@@ -673,7 +717,7 @@ export class TelegramBotService {
           Markup.inlineKeyboard(mainButtons) as any,
         );
       } catch (e) {
-        await ctx.reply(message, {
+        await this.replyWithFooter(ctx, message, {
           ...getMainKeyboard(),
           ...Markup.inlineKeyboard(mainButtons),
         } as any);
@@ -698,7 +742,7 @@ export class TelegramBotService {
     await ctx.answerCbQuery();
     user.state = 'SUPPORT';
     await this.userRepository.save(user);
-    await ctx.reply('💬 Напишите ваш ответ поддержке:');
+    await this.replyWithFooter(ctx, '💬 Напишите ваш ответ поддержке:');
   }
 
   @Command('subscriptions')
@@ -1168,10 +1212,14 @@ export class TelegramBotService {
           ),
         ],
       ]);
-      await ctx.reply(this.textHandlerService.getHelpMessage(), {
-        ...getMainKeyboard(),
-        ...helpButtons,
-      });
+      await this.replyWithFooter(
+        ctx,
+        this.textHandlerService.getHelpMessage(),
+        {
+          ...getMainKeyboard(),
+          ...helpButtons,
+        },
+      );
     }
   }
 
