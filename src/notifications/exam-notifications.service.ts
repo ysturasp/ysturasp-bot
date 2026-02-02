@@ -28,6 +28,27 @@ export class ExamNotificationsService {
     return groupName.trim().toUpperCase();
   }
 
+  private normalizeString(value: string | null | undefined): string {
+    if (!value) return '';
+    return value.trim().replace(/\s+/g, ' ');
+  }
+
+  private hasExamChanged(
+    existing: Partial<Exam>,
+    newData: Partial<Exam>,
+  ): boolean {
+    return (
+      this.normalizeString(existing.date) !==
+        this.normalizeString(newData.date) ||
+      this.normalizeString(existing.teacherName) !==
+        this.normalizeString(newData.teacherName) ||
+      this.normalizeString(existing.auditoryName) !==
+        this.normalizeString(newData.auditoryName) ||
+      this.normalizeString(existing.timeRange) !==
+        this.normalizeString(newData.timeRange)
+    );
+  }
+
   @Cron('*/5 * * * *')
   async checkExams() {
     this.logger.debug('Checking for exam notifications...');
@@ -75,12 +96,7 @@ export class ExamNotificationsService {
           await this.notifySubscribers(groupSubs, saved, 'new');
         }
       } else {
-        if (
-          existing.date !== exam.date ||
-          existing.teacherName !== exam.teacherName ||
-          existing.auditoryName !== exam.auditoryName ||
-          existing.timeRange !== exam.timeRange
-        ) {
+        if (this.hasExamChanged(existing, exam)) {
           await this.examRepository.update(existing.id, { ...exam, groupName });
           const payload = {
             ...existing,
