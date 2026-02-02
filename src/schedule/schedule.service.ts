@@ -121,7 +121,7 @@ export class ScheduleService {
         if (cachedRaw) {
           try {
             const cached = JSON.parse(cachedRaw);
-            cachedData = cached.data;
+            cachedData = cached;
             cachedTimestamp = cached.timestamp || 0;
 
             const ageMinutes = (Date.now() - cachedTimestamp) / 1000 / 60;
@@ -134,7 +134,8 @@ export class ScheduleService {
               this.logger.log(
                 `Cache hit for group: ${groupName} (age: ${ageMinutes.toFixed(1)} min)`,
               );
-              return cachedData;
+              const { timestamp, ...data } = cached;
+              return data;
             } else {
               this.logger.log(
                 `Cache stale for group: ${groupName} (age: ${ageMinutes.toFixed(1)} min), will try to refresh`,
@@ -168,7 +169,7 @@ export class ScheduleService {
               );
 
               const cachePayload = {
-                data,
+                ...data,
                 timestamp: Date.now(),
               };
               const ttl = this.configService.get<number>('CACHE_TTL', 604800);
@@ -209,7 +210,8 @@ export class ScheduleService {
             this.logger.warn(
               `API unavailable for ${groupName}, using stale cache (age: ${ageMinutes.toFixed(1)} min)`,
             );
-            return cachedData;
+            const { timestamp, ...data } = cachedData;
+            return data;
           }
 
           if (error instanceof AxiosError && error.response?.status === 404) {
