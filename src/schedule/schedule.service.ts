@@ -115,11 +115,31 @@ export class ScheduleService {
     groupLocks[groupName] = (async () => {
       try {
         const cachedRaw = await this.redis.get(cacheKey);
+        let cachedData = null;
+        let cachedTimestamp = 0;
+
         if (cachedRaw) {
           try {
             const cached = JSON.parse(cachedRaw);
-            this.logger.log(`Cache hit for group: ${groupName}`);
-            return cached;
+            cachedData = cached.data;
+            cachedTimestamp = cached.timestamp || 0;
+
+            const ageMinutes = (Date.now() - cachedTimestamp) / 1000 / 60;
+            const freshThreshold = this.configService.get<number>(
+              'CACHE_FRESH_MINUTES',
+              20,
+            );
+
+            if (ageMinutes < freshThreshold) {
+              this.logger.log(
+                `Cache hit for group: ${groupName} (age: ${ageMinutes.toFixed(1)} min)`,
+              );
+              return cachedData;
+            } else {
+              this.logger.log(
+                `Cache stale for group: ${groupName} (age: ${ageMinutes.toFixed(1)} min), will try to refresh`,
+              );
+            }
           } catch (e) {
             this.logger.debug('Failed to parse schedule cache', e);
           }
@@ -147,9 +167,19 @@ export class ScheduleService {
                 ),
               );
 
-              const ttl = this.configService.get<number>('CACHE_TTL', 1200);
+              const cachePayload = {
+                data,
+                timestamp: Date.now(),
+              };
+              const ttl = this.configService.get<number>('CACHE_TTL', 604800);
               try {
-                await this.redis.set(cacheKey, JSON.stringify(data), 'EX', ttl);
+                await this.redis.set(
+                  cacheKey,
+                  JSON.stringify(cachePayload),
+                  'EX',
+                  ttl,
+                );
+                this.logger.log(`Updated cache for group: ${groupName}`);
               } catch (e) {
                 this.logger.debug('Failed to set schedule cache', e);
               }
@@ -169,8 +199,25 @@ export class ScheduleService {
             }
           }
         };
-        const data = await runWithLimit(() => perform());
-        return data;
+
+        try {
+          const data = await runWithLimit(() => perform());
+          return data;
+        } catch (error) {
+          if (cachedData) {
+            const ageMinutes = (Date.now() - cachedTimestamp) / 1000 / 60;
+            this.logger.warn(
+              `API unavailable for ${groupName}, using stale cache (age: ${ageMinutes.toFixed(1)} min)`,
+            );
+            return cachedData;
+          }
+
+          if (error instanceof AxiosError && error.response?.status === 404) {
+            return null;
+          }
+          this.logger.error(`Error fetching schedule for ${groupName}`, error);
+          throw error;
+        }
       } catch (error) {
         if (error instanceof AxiosError && error.response?.status === 404) {
           return null;
