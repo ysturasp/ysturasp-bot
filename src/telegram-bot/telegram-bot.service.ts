@@ -367,6 +367,50 @@ export class TelegramBotService {
     await this.scheduleCommandService.handleBackToGroup(ctx, user, groupName);
   }
 
+  @Action(/^schedule_day:(\d+)$/)
+  async onScheduleDay(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    // @ts-ignore
+    const dayOffset = parseInt(ctx.match[1], 10);
+    const user = await this.userHelperService.getUser(ctx);
+    await this.scheduleCommandService.handleScheduleRequest(
+      ctx,
+      user.id,
+      dayOffset,
+    );
+  }
+
+  @Action('schedule_week')
+  async onScheduleWeek(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+    await this.scheduleCommandService.handleScheduleRequest(
+      ctx,
+      user.id,
+      'week',
+    );
+  }
+
+  @Action('show_exams')
+  async onShowExams(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+    await this.scheduleCommandService.handleExams(ctx, user.id);
+  }
+
+  @Action('back_to_schedule_menu')
+  async onBackToScheduleMenu(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('📅 Сегодня', 'schedule_day:0')],
+      [Markup.button.callback('📅 Завтра', 'schedule_day:1')],
+      [Markup.button.callback('📅 Неделя', 'schedule_week')],
+      [Markup.button.callback('📝 Экзамены', 'show_exams')],
+    ]);
+
+    await ctx.editMessageText('Выберите, что хотите посмотреть:', keyboard);
+  }
+
   @Action('manage_subs')
   async onManageSubs(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);

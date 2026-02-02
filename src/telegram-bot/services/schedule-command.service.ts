@@ -208,10 +208,23 @@ export class ScheduleCommandService {
     }
 
     if (foundAny) {
-      await ctx.reply(msg.trim(), {
-        parse_mode: 'HTML',
-        link_preview_options: { is_disabled: true },
-      });
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
+      ]);
+      // @ts-ignore
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(msg.trim(), {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        });
+      } else {
+        await ctx.reply(msg.trim(), {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        });
+      }
       this.analyticsService
         .track({
           chatId: user.chatId,
@@ -222,7 +235,18 @@ export class ScheduleCommandService {
         })
         .catch(() => {});
     } else {
-      await ctx.reply('Экзамены для ваших групп не найдены.');
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
+      ]);
+      // @ts-ignore
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(
+          'Экзамены для ваших групп не найдены.',
+          keyboard,
+        );
+      } else {
+        await ctx.reply('Экзамены для ваших групп не найдены.', keyboard);
+      }
     }
   }
 
@@ -447,8 +471,14 @@ export class ScheduleCommandService {
             `view_week:${groupName}:${weekOffset + 1}`,
           ),
         ],
+        [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
       ]);
-      await ctx.reply(message, keyboard);
+      // @ts-ignore
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(message, keyboard);
+      } else {
+        await ctx.reply(message, keyboard);
+      }
       this.analyticsService
         .track({
           chatId: user.chatId,
@@ -468,7 +498,19 @@ export class ScheduleCommandService {
       0,
       'student',
     );
-    await ctx.reply(message);
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
+    ]);
+    // @ts-ignore
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(message, {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        ...keyboard,
+      });
+    } else {
+      await ctx.reply(message, keyboard);
+    }
     const viewType =
       dayOffset === 0 ? 'today' : dayOffset === 1 ? 'tomorrow' : 'day';
     this.analyticsService

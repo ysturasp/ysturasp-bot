@@ -27,6 +27,24 @@ export class TextHandlerService {
     const chatType =
       (ctx.chat && (ctx.chat as any).type) ||
       ((ctx.message as any)?.chat && (ctx.message as any).chat.type);
+
+    if (this.isScheduleRequest(text)) {
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('📅 Сегодня', 'schedule_day:0')],
+        [Markup.button.callback('📅 Завтра', 'schedule_day:1')],
+        [Markup.button.callback('📅 Неделя', 'schedule_week')],
+        [Markup.button.callback('📝 Экзамены', 'show_exams')],
+      ]);
+
+      await ctx.reply('Выберите, что хотите посмотреть:', keyboard);
+      return true;
+    }
+
+    const extractedGroup = this.extractGroupFromMessage(text);
+    if (extractedGroup) {
+      text = extractedGroup;
+    }
+
     if (
       text === '📅 Сегодня' ||
       text === '/today' ||
@@ -267,6 +285,68 @@ export class TextHandlerService {
     }
 
     return false;
+  }
+
+  private isScheduleRequest(text: string): boolean {
+    const lowerText = text.toLowerCase().trim();
+    const scheduleKeywords = [
+      'расписание',
+      'распис',
+      'раписание',
+      'расписаие',
+      'распесание',
+      'рапсписание',
+      'рачписание',
+      'рачсписание',
+      'расрисание',
+      'расписание на сегодня',
+      'расписание на завтра',
+      'расписание на неделю',
+      'покажи расписание',
+      'показать расписание',
+      'hfcgbcfybt',
+    ];
+
+    return scheduleKeywords.some((keyword) => lowerText === keyword);
+  }
+
+  private extractGroupFromMessage(text: string): string | null {
+    const trimmedText = text.trim();
+
+    const patterns = [
+      /(?:расписание|расписаие|распис|покажи|дай|смотреть|посмотреть|показать|глянуть|гляну|дайте|хочу|нужно|надо)\s+([а-яёА-ЯЁa-zA-Z]{1,5}[-\s]?\d{1,2}[а-яёА-ЯЁa-zA-Z]?)/iu,
+
+      /(?:на\s+(?:сегодня|завтра|неделю|понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье))\s+([а-яёА-ЯЁa-zA-Z]{1,5}[-\s]?\d{1,2}[а-яёА-ЯЁa-zA-Z]?)/iu,
+
+      /^([а-яёА-ЯЁa-zA-Z]{1,5})[-\s](\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
+
+      /^([а-яёА-ЯЁa-zA-Z]{1,5})(\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
+
+      /([а-яёА-ЯЁa-zA-Z]{1,5}[-\s]?\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
+    ];
+
+    for (const pattern of patterns) {
+      const match = trimmedText.match(pattern);
+      if (match) {
+        let groupName: string;
+
+        if (match.length === 2) {
+          groupName = match[1].trim();
+        } else if (match.length === 3) {
+          groupName = `${match[1]}-${match[2]}`;
+        } else {
+          continue;
+        }
+
+        groupName = groupName.replace(/\s+/g, '-').toUpperCase();
+
+        if (groupName.length >= 3 && groupName.length <= 8) {
+          return groupName;
+        }
+      }
+    }
+
+    return null;
   }
 
   getHelpMessage(): string {
