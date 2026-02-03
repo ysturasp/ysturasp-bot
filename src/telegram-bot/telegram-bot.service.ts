@@ -957,15 +957,15 @@ export class TelegramBotService {
         `👥 Всего пользователей: ${totalUsers}`,
         '',
         `📈 За период:`,
-        `  • Событий: ${summary.totalEvents}`,
-        `  • Активных пользователей: ${summary.uniqueUsers}`,
+        `• Событий: ${summary.totalEvents}`,
+        `• Активных пользователей: ${summary.uniqueUsers}`,
         '',
         '🔥 Топ действий:',
       ];
 
       summary.eventsByType.slice(0, 10).forEach((e, i) => {
         const eventName = eventNamesRu[e.eventType] || e.eventType;
-        lines.push(`  ${i + 1}. ${eventName}: ${e.count}`);
+        lines.push(`${i + 1}. ${eventName}: ${e.count}`);
       });
 
       const keyboard = Markup.inlineKeyboard([
