@@ -41,11 +41,6 @@ export class TextHandlerService {
       return true;
     }
 
-    const extractedGroup = this.extractGroupFromMessage(text);
-    if (extractedGroup) {
-      text = extractedGroup;
-    }
-
     if (
       text === '📅 Сегодня' ||
       text === '/today' ||
@@ -91,6 +86,12 @@ export class TextHandlerService {
     ) {
       await this.subscriptionService.handleSubscriptions(ctx, user);
       return true;
+    }
+
+    const originalText = text.trim();
+    const extractedGroup = this.extractGroupFromMessage(text);
+    if (extractedGroup) {
+      text = extractedGroup;
     }
 
     if (user.state === 'WAITING_GROUP_SUBSCRIBE') {
@@ -173,10 +174,13 @@ export class TextHandlerService {
       return true;
     }
 
-    const possibleGroup = text.trim();
-
     const groups = await this.scheduleService.getGroups();
-    const canonicalGroup = findCanonicalGroupName(possibleGroup, groups);
+    let possibleGroup = text.trim();
+    let canonicalGroup = findCanonicalGroupName(possibleGroup, groups);
+
+    if (!canonicalGroup && originalText !== possibleGroup) {
+      canonicalGroup = findCanonicalGroupName(originalText, groups);
+    }
 
     if (canonicalGroup) {
       const keyboard = Markup.inlineKeyboard([
@@ -381,7 +385,7 @@ export class TextHandlerService {
 
       /(?:на\s+(?:сегодня|завтра|неделю|следующую\s+неделю|эту\s+неделю|понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье))\s+([а-яёА-ЯЁa-zA-Z]{1,5}[-\s]?\d{1,2}[а-яёА-ЯЁa-zA-Z]?)/iu,
 
-      /^([а-яёА-ЯЁa-zA-Z]{1,5})[-\s](\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
+      /^([а-яёА-ЯЁa-zA-Z]{1,5})[-\s]+(\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
 
       /^([а-яёА-ЯЁa-zA-Z]{1,5})(\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
 
@@ -396,14 +400,14 @@ export class TextHandlerService {
         if (match.length === 2) {
           groupName = match[1].trim();
         } else if (match.length === 3) {
-          groupName = `${match[1]}-${match[2]}`;
+          groupName = `${match[1].trim()}-${match[2].trim()}`;
         } else {
           continue;
         }
 
         groupName = groupName.replace(/\s+/g, '-').toUpperCase();
 
-        if (groupName.length >= 3 && groupName.length <= 8) {
+        if (groupName.length >= 3 && groupName.length <= 10) {
           return groupName;
         }
       }
