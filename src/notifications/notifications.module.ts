@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 import { NotificationsService } from './notifications.service';
 import { Subscription } from '../database/entities/subscription.entity';
+import { BotEvent } from '../database/entities/bot-event.entity';
 import { ScheduleModule } from '../schedule/schedule.module';
 import { ExamNotificationsService } from './exam-notifications.service';
 import { Exam } from '../database/entities/exam.entity';
@@ -14,7 +15,7 @@ import { StatisticsService } from '../telegram-bot/services/statistics.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Subscription, Exam, User]),
+    TypeOrmModule.forFeature([Subscription, Exam, User, BotEvent]),
     ScheduleModule,
     AnalyticsModule,
     HttpModule,
