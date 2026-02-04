@@ -7,6 +7,7 @@ import { Telegraf } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import { User } from '../../database/entities/user.entity';
 import { SupportRequest } from '../../database/entities/support-request.entity';
+import { Subscription } from '../../database/entities/subscription.entity';
 import { EncryptionService } from './encryption.service';
 
 @Injectable()
@@ -18,10 +19,42 @@ export class SupportService {
     private readonly supportRequestRepository: Repository<SupportRequest>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionRepository: Repository<Subscription>,
     private readonly configService: ConfigService,
     private readonly encryptionService: EncryptionService,
     @InjectBot() private readonly bot: Telegraf,
   ) {}
+
+  private async getUserInfoForAdmin(user: User): Promise<string> {
+    const name =
+      `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
+    const username = user.username ? `@${user.username}` : 'нет username';
+
+    let info = `👤 <b>Пользователь:</b> ${name} (${username})\n`;
+    info += `🆔 <b>Chat ID:</b> <code>${user.chatId}</code>\n`;
+
+    if (user.preferredGroup) {
+      info += `📚 <b>Предпочитаемая группа:</b> ${user.preferredGroup}\n`;
+    }
+
+    try {
+      const subscriptions = await this.subscriptionRepository
+        .createQueryBuilder('subscription')
+        .where('subscription.userId = :userId', { userId: user.chatId })
+        .andWhere('subscription.isActive = :isActive', { isActive: true })
+        .getMany();
+
+      if (subscriptions.length > 0) {
+        const groups = subscriptions.map((s) => s.groupName).join(', ');
+        info += `🔔 <b>Подписки на уведомления:</b> ${groups}\n`;
+      }
+    } catch (e) {
+      this.logger.debug('Error fetching subscriptions for user info');
+    }
+
+    return info;
+  }
 
   async handleSupportCommand(ctx: Context, user: User): Promise<void> {
     user.state = 'SUPPORT';
@@ -91,9 +124,9 @@ export class SupportService {
     });
     await this.supportRequestRepository.save(request);
 
-    const name =
-      `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
-    const username = user.username ? `@${user.username}` : 'нет username';
+    const userInfo = await this.getUserInfoForAdmin(user);
+
+    const replyMessage = 'Ваше сообщение отправлено в поддержку. Спасибо!';
 
     const kb = {
       reply_markup: {
@@ -102,11 +135,13 @@ export class SupportService {
         ],
       },
     };
-    await ctx.telegram.sendMessage(
-      adminChatId,
-      `📩 Новая ${type} от ${name} (${username}):\n${text}`,
-      kb as any,
-    );
+
+    const adminMessage = `📩 <b>Новая ${type}</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос:</b>\n${text}\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+
+    await ctx.telegram.sendMessage(adminChatId, adminMessage, {
+      parse_mode: 'HTML',
+      ...kb,
+    } as any);
 
     if (user.stateData?.menuMessageId) {
       try {
@@ -120,7 +155,7 @@ export class SupportService {
     user.state = null;
     user.stateData = null;
     await this.userRepository.save(user);
-    await ctx.reply('Ваше сообщение отправлено в поддержку. Спасибо!');
+    await ctx.reply(replyMessage);
   }
 
   async handleSupportPhoto(
@@ -148,9 +183,10 @@ export class SupportService {
     });
     await this.supportRequestRepository.save(request);
 
-    const name =
-      `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
-    const username = user.username ? `@${user.username}` : 'нет username';
+    const userInfo = await this.getUserInfoForAdmin(user);
+
+    const replyMessage =
+      'Ваша фотография и текст отправлены в поддержку. Спасибо!';
 
     const kb = {
       reply_markup: {
@@ -159,8 +195,12 @@ export class SupportService {
         ],
       },
     };
+
+    const photoCaption = `📩 <b>Новая ${type}</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос (фото):</b>\n${caption || '[без текста]'}\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+
     await ctx.telegram.sendPhoto(adminChatId, fileId, {
-      caption: `📩 Новая ${type} от ${name} (${username})\nТекст: ${caption}`,
+      caption: photoCaption,
+      parse_mode: 'HTML',
       ...kb,
     });
 
@@ -176,7 +216,7 @@ export class SupportService {
     user.state = null;
     user.stateData = null;
     await this.userRepository.save(user);
-    await ctx.reply('Ваша фотография и текст отправлены в поддержку. Спасибо!');
+    await ctx.reply(replyMessage);
   }
 
   async handleSupportVideo(
@@ -204,9 +244,9 @@ export class SupportService {
     });
     await this.supportRequestRepository.save(request);
 
-    const name =
-      `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
-    const username = user.username ? `@${user.username}` : 'нет username';
+    const userInfo = await this.getUserInfoForAdmin(user);
+
+    const replyMessage = 'Ваше видео и текст отправлены в поддержку. Спасибо!';
 
     const kb = {
       reply_markup: {
@@ -215,8 +255,12 @@ export class SupportService {
         ],
       },
     };
+
+    const videoCaption = `📩 <b>Новая ${type}</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос (видео):</b>\n${caption || '[без текста]'}\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+
     await ctx.telegram.sendVideo(adminChatId, fileId, {
-      caption: `📩 Новая ${type} от ${name} (${username})\nТекст: ${caption}`,
+      caption: videoCaption,
+      parse_mode: 'HTML',
       ...kb,
     });
 
@@ -232,7 +276,7 @@ export class SupportService {
     user.state = null;
     user.stateData = null;
     await this.userRepository.save(user);
-    await ctx.reply('Ваше видео и текст отправлены в поддержку. Спасибо!');
+    await ctx.reply(replyMessage);
   }
 
   async handleReplyCommand(

@@ -4,6 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../database/entities/user.entity';
+import { Subscription } from '../database/entities/subscription.entity';
 import { ScheduleService } from '../schedule/schedule.service';
 import { ConfigService } from '@nestjs/config';
 import { getMainKeyboard } from './helpers/keyboard.helper';
@@ -27,6 +28,8 @@ export class TelegramBotService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionRepository: Repository<Subscription>,
     private readonly scheduleService: ScheduleService,
     private readonly configService: ConfigService,
     private readonly supportService: SupportService,
@@ -40,6 +43,36 @@ export class TelegramBotService {
     private readonly referralService: ReferralService,
     private readonly analyticsService: AnalyticsService,
   ) {}
+
+  private async getUserInfoForAdmin(user: User): Promise<string> {
+    const name =
+      `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
+    const username = user.username ? `@${user.username}` : 'нет username';
+
+    let info = `👤 <b>Пользователь:</b> ${name} (${username})\n`;
+    info += `🆔 <b>Chat ID:</b> <code>${user.chatId}</code>\n`;
+
+    if (user.preferredGroup) {
+      info += `📚 <b>Предпочитаемая группа:</b> ${user.preferredGroup}\n`;
+    }
+
+    try {
+      const subscriptions = await this.subscriptionRepository
+        .createQueryBuilder('subscription')
+        .where('subscription.userId = :userId', { userId: user.chatId })
+        .andWhere('subscription.isActive = :isActive', { isActive: true })
+        .getMany();
+
+      if (subscriptions.length > 0) {
+        const groups = subscriptions.map((s) => s.groupName).join(', ');
+        info += `🔔 <b>Подписки на уведомления:</b> ${groups}\n`;
+      }
+    } catch (e) {
+      this.logger.debug('Error fetching subscriptions for user info');
+    }
+
+    return info;
+  }
 
   private addFooterLinks(message: string): string {
     return message + getFooterLinks();
@@ -1191,16 +1224,17 @@ export class TelegramBotService {
     if (!handled) {
       if (ctx.chat?.type !== 'private') return;
       if (user && user.isAdmin) {
-        const fromName =
-          ctx.from?.first_name || ctx.from?.username || 'Unknown';
-        const username = ctx.from?.username
-          ? `@${ctx.from.username}`
-          : 'нет username';
-        const info = `Сообщение (нераспознано) от ${fromName} (${username}; chatId: ${user.chatId}):\n${text}`;
+        const userInfo = await this.getUserInfoForAdmin(user);
+        const helpMessage = this.textHandlerService.getHelpMessage();
+
+        const info = `❓ <b>Нераспознанное сообщение</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос:</b>\n${text}\n\n<b>✅ Ответ пользователю:</b>\n${helpMessage}`;
         const kb = Markup.inlineKeyboard([
           [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
         ]);
-        await ctx.telegram.sendMessage(user.chatId, info, kb as any);
+        await ctx.telegram.sendMessage(user.chatId, info, {
+          parse_mode: 'HTML',
+          ...kb,
+        } as any);
       }
       user.stateData = { backTarget: 'help' };
       await this.userRepository.save(user);
@@ -1242,18 +1276,22 @@ export class TelegramBotService {
         const admins = await this.userRepository.find({
           where: { isAdmin: true },
         });
-        const fromName =
-          ctx.from?.first_name || ctx.from?.username || 'Unknown';
-        const username = ctx.from?.username
-          ? `@${ctx.from.username}`
-          : 'нет username';
-        const info = `Фотография от ${fromName} (${username}; chatId: ${user.chatId})\nfile_id: ${fileId}\ncaption: ${caption}`;
+
+        const userInfo = await this.getUserInfoForAdmin(user);
+        const replyMessage =
+          'Фотография получена, но не указана тема. Используйте /support или /suggestion';
+
+        const photoInfo = `📷 <b>Фотография (вне контекста)</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Подпись:</b>\n${caption || '[без текста]'}\n<b>🆔 File ID:</b> <code>${fileId}</code>\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+
         const kb = Markup.inlineKeyboard([
           [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
         ]);
         for (const admin of admins) {
           try {
-            await ctx.telegram.sendMessage(admin.chatId, info, kb as any);
+            await ctx.telegram.sendMessage(admin.chatId, photoInfo, {
+              parse_mode: 'HTML',
+              ...kb,
+            } as any);
           } catch (e) {
             this.logger.debug(
               `Failed forwarding photo to admin ${admin.chatId}`,
@@ -1335,18 +1373,22 @@ export class TelegramBotService {
         const admins = await this.userRepository.find({
           where: { isAdmin: true },
         });
-        const fromName =
-          ctx.from?.first_name || ctx.from?.username || 'Unknown';
-        const username = ctx.from?.username
-          ? `@${ctx.from.username}`
-          : 'нет username';
-        const info = `Видео от ${fromName} (${username}; chatId: ${user.chatId})\nfile_id: ${fileId}\ncaption: ${caption}`;
+
+        const userInfo = await this.getUserInfoForAdmin(user);
+        const replyMessage =
+          'Видео получено, но не указана тема. Используйте /support или /suggestion';
+
+        const videoInfo = `🎥 <b>Видео (вне контекста)</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Подпись:</b>\n${caption || '[без текста]'}\n<b>🆔 File ID:</b> <code>${fileId}</code>\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+
         const kb = Markup.inlineKeyboard([
           [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
         ]);
         for (const admin of admins) {
           try {
-            await ctx.telegram.sendMessage(admin.chatId, info, kb as any);
+            await ctx.telegram.sendMessage(admin.chatId, videoInfo, {
+              parse_mode: 'HTML',
+              ...kb,
+            } as any);
           } catch (e) {
             this.logger.debug(
               `Failed forwarding video to admin ${admin.chatId}`,
