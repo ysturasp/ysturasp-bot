@@ -1169,18 +1169,21 @@ export class TelegramBotService {
         const admins = await this.userRepository.find({
           where: { isAdmin: true },
         });
-        const fromName =
-          ctx.from?.first_name || ctx.from?.username || 'Unknown';
-        const username = ctx.from?.username
-          ? `@${ctx.from.username}`
-          : 'нет username';
-        const info = `Сообщение от ${fromName} (${username}; chatId: ${user.chatId}):\n${text}`;
+
+        const userInfo = await this.getUserInfoForAdmin(user);
+        const replyMessage = '(сообщение переслано администраторам)';
+
+        const info = `💬 <b>Сообщение от пользователя</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Текст:</b>\n${text}\n\n<b>ℹ️ Статус:</b>\n${replyMessage}`;
+
         const kb = Markup.inlineKeyboard([
           [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
         ]);
         for (const admin of admins) {
           try {
-            await ctx.telegram.sendMessage(admin.chatId, info, kb as any);
+            await ctx.telegram.sendMessage(admin.chatId, info, {
+              parse_mode: 'HTML',
+              ...kb,
+            } as any);
           } catch (e) {
             this.logger.debug(
               `Failed forwarding message to admin ${admin.chatId}`,
