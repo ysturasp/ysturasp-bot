@@ -139,6 +139,10 @@ function formatDaySchedule(
   let msg = `📅 ${dayName} (${dateStr})\n\n`;
 
   foundLessons.forEach((lesson) => {
+    if (!lesson.lessonName && !lesson.teacherName && !lesson.auditoryName) {
+      return;
+    }
+
     msg += `📚 ${escapeHtml(lesson.lessonName)}\n`;
     msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
     const time = formatLessonTime(lesson);
@@ -220,6 +224,10 @@ function formatWeekSchedule(
     msg += `━━━ ${dayName} ${dateStr} ━━━\n\n`;
 
     day.lessons.forEach((lesson) => {
+      if (!lesson.lessonName && !lesson.teacherName && !lesson.auditoryName) {
+        return;
+      }
+
       msg += `📚 ${escapeHtml(lesson.lessonName)}\n`;
       msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
       const time = formatLessonTime(lesson);
