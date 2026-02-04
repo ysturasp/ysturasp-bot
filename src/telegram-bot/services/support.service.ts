@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { Context, Markup } from 'telegraf';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';
@@ -21,6 +21,7 @@ export class SupportService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    private readonly entityManager: EntityManager,
     private readonly configService: ConfigService,
     private readonly encryptionService: EncryptionService,
     @InjectBot() private readonly bot: Telegraf,
@@ -35,22 +36,23 @@ export class SupportService {
     info += `🆔 <b>Chat ID:</b> <code>${user.chatId}</code>\n`;
 
     if (user.preferredGroup) {
-      info += `📚 <b>Предпочитаемая группа:</b> ${user.preferredGroup}\n`;
+      info += `📚 <b>Выбранная группа:</b> ${user.preferredGroup}\n`;
     }
 
     try {
-      const subscriptions = await this.subscriptionRepository
-        .createQueryBuilder('subscription')
-        .where('subscription.userId = :userId', { userId: user.chatId })
-        .andWhere('subscription.isActive = :isActive', { isActive: true })
-        .getMany();
+      const subscriptions = await this.subscriptionRepository.find({
+        where: {
+          user: { id: user.id },
+          isActive: true,
+        },
+      });
 
-      if (subscriptions.length > 0) {
+      if (subscriptions && subscriptions.length > 0) {
         const groups = subscriptions.map((s) => s.groupName).join(', ');
         info += `🔔 <b>Подписки на уведомления:</b> ${groups}\n`;
       }
     } catch (e) {
-      this.logger.debug('Error fetching subscriptions for user info');
+      this.logger.error('Error fetching subscriptions for user info', e);
     }
 
     return info;
