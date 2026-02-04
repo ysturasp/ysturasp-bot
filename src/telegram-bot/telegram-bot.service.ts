@@ -1198,7 +1198,8 @@ export class TelegramBotService {
 
     if (!handled) {
       if (ctx.chat?.type !== 'private') return;
-      if (user && user.isAdmin) {
+
+      if (user && !user.isAdmin) {
         const userInfo = await this.getUserInfoForAdmin(user);
         const helpMessage = this.textHandlerService.getHelpMessage();
 
@@ -1206,10 +1207,20 @@ export class TelegramBotService {
         const kb = Markup.inlineKeyboard([
           [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
         ]);
-        await ctx.telegram.sendMessage(user.chatId, info, {
-          parse_mode: 'HTML',
-          ...kb,
-        } as any);
+
+        const admins = await this.userRepository.find({
+          where: { isAdmin: true },
+        });
+        for (const admin of admins) {
+          try {
+            await ctx.telegram.sendMessage(admin.chatId, info, {
+              parse_mode: 'HTML',
+              ...kb,
+            } as any);
+          } catch (e) {
+            this.logger.error(`Failed to send to admin ${admin.chatId}`, e);
+          }
+        }
       }
       user.stateData = { backTarget: 'help' };
       await this.userRepository.save(user);
