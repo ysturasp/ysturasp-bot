@@ -7,6 +7,7 @@ import { Subscription } from '../../database/entities/subscription.entity';
 import { ScheduleService } from '../../schedule/schedule.service';
 import { getMainKeyboard } from '../helpers/keyboard.helper';
 import { findCanonicalGroupName } from '../../helpers/group-normalizer';
+import { parseTimeToMinutes, formatMinutes } from '../../helpers/time-parser';
 
 @Injectable()
 export class SubscriptionService {
@@ -83,7 +84,7 @@ export class SubscriptionService {
       msg += '🔔 Подписки с уведомлениями:\n';
       subs.forEach((sub) => {
         const isPreferred = user.preferredGroup === sub.groupName;
-        msg += `👨‍💻 Группа: <b>${sub.groupName}</b>\n⏰ За ${sub.notifyMinutes} минут`;
+        msg += `👨‍💻 Группа: <b>${sub.groupName}</b>\n⏰ За ${formatMinutes(sub.notifyMinutes)}`;
         if (isPreferred) {
           msg += '\n⭐ Используется для быстрого просмотра';
         }
@@ -275,7 +276,7 @@ export class SubscriptionService {
     ]);
 
     await ctx.editMessageText(
-      `✅ Группа ${normalizedGroupName} выбрана!\n\nЗа сколько минут до начала пары присылать уведомление? (Напишите число, например 30)`,
+      `✅ Группа ${normalizedGroupName} выбрана!\n\nЗа сколько до начала пары присылать уведомление?\n\nПримеры:\n• 30 или 30 минут\n• 1 час или 1ч\n• 1.5 часа\n• 1ч 30м\n• 1 день`,
       keyboard,
     );
   }
@@ -321,7 +322,7 @@ export class SubscriptionService {
     await this.userRepository.save(user);
 
     await ctx.reply(
-      `✅ Группа ${normalizedGroupName} найдена!\n\nЗа сколько минут до начала занятия присылать уведомление? (Напишите число, например 30)`,
+      `✅ Группа ${normalizedGroupName} найдена!\n\nЗа сколько до начала занятия присылать уведомление?\n\nПримеры:\n• 30 или 30 минут\n• 1 час или 1ч\n• 1.5 часа\n• 1ч 30м\n• 1 день`,
     );
     return true;
   }
@@ -329,11 +330,13 @@ export class SubscriptionService {
   async handleWaitingNotifyTime(
     ctx: Context,
     user: User,
-    minutes: number,
+    timeInput: string,
   ): Promise<boolean> {
-    if (isNaN(minutes) || minutes < 1) {
+    const minutes = parseTimeToMinutes(timeInput);
+
+    if (minutes === null || minutes < 1) {
       await ctx.reply(
-        '⚠️ Пожалуйста, введите корректное число минут (больше 0):',
+        '⚠️ Пожалуйста, введите корректное время (больше 0).\n\nПримеры:\n• 30 или 30 минут\n• 1 час или 1ч\n• 1.5 часа\n• 1ч 30м\n• 1 день',
       );
       return false;
     }
@@ -383,7 +386,7 @@ export class SubscriptionService {
     await this.userRepository.save(user);
 
     await ctx.reply(
-      `✅ Готово! Вы подписались на расписание группы <b>${normalizedGroupName}</b>.\n⏰ Уведомления будут приходить за <b>${minutes} мин</b> до начала пары.`,
+      `✅ Готово! Вы подписались на расписание группы <b>${normalizedGroupName}</b>.\n⏰ Уведомления будут приходить за <b>${formatMinutes(minutes)}</b> до начала пары.`,
       { parse_mode: 'HTML', ...getMainKeyboard() },
     );
     return true;

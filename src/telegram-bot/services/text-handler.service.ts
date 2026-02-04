@@ -130,11 +130,10 @@ export class TextHandlerService {
     }
 
     if (user.state === 'WAITING_NOTIFY_TIME') {
-      const minutes = parseInt(text);
       return await this.subscriptionService.handleWaitingNotifyTime(
         ctx,
         user,
-        minutes,
+        text,
       );
     }
 

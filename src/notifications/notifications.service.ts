@@ -9,6 +9,7 @@ import { Subscription } from '../database/entities/subscription.entity';
 import { BotEvent } from '../database/entities/bot-event.entity';
 import { ScheduleService } from '../schedule/schedule.service';
 import { getLessonTypeName } from '../helpers/schedule-formatter';
+import { formatMinutes } from '../helpers/time-parser';
 import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
@@ -115,7 +116,7 @@ export class NotificationsService {
   ) {
     const message = `🔔 Напоминание! (${groupName})
     
-🕐 Через ${sub.notifyMinutes} минут (${lesson.timeRange})
+🕐 Через ${formatMinutes(sub.notifyMinutes)} (${lesson.timeRange})
 📚 ${lesson.lessonName}
 📝 ${getLessonTypeName(lesson.type)}
 ${lesson.auditoryName ? `🏛 ${lesson.auditoryName}` : ''}
