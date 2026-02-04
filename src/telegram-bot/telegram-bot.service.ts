@@ -1164,37 +1164,6 @@ export class TelegramBotService {
     const text = ctx.message.text;
     const user = await this.userHelperService.getUser(ctx);
 
-    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
-      try {
-        const admins = await this.userRepository.find({
-          where: { isAdmin: true },
-        });
-
-        const userInfo = await this.getUserInfoForAdmin(user);
-        const replyMessage = '(сообщение переслано администраторам)';
-
-        const info = `💬 <b>Сообщение от пользователя</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Текст:</b>\n${text}\n\n<b>ℹ️ Статус:</b>\n${replyMessage}`;
-
-        const kb = Markup.inlineKeyboard([
-          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
-        ]);
-        for (const admin of admins) {
-          try {
-            await ctx.telegram.sendMessage(admin.chatId, info, {
-              parse_mode: 'HTML',
-              ...kb,
-            } as any);
-          } catch (e) {
-            this.logger.debug(
-              `Failed forwarding message to admin ${admin.chatId}`,
-            );
-          }
-        }
-      } catch (e) {
-        this.logger.error('Error while forwarding message to admins', e);
-      }
-    }
-
     if (user?.state === 'BROADCAST' && user.isAdmin) {
       await this.broadcastService.handleBroadcastCommand(ctx, text.trim());
       user.state = null;
@@ -1226,6 +1195,7 @@ export class TelegramBotService {
     }
 
     const handled = await this.textHandlerService.handleText(ctx, user, text);
+
     if (!handled) {
       if (ctx.chat?.type !== 'private') return;
       if (user && user.isAdmin) {
