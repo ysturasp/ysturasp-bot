@@ -34,6 +34,16 @@ export class SemesterStartBroadcastService {
       return;
     }
 
+    const semesterKey = this.getSemesterKey();
+    const alreadySent = await this.redis.get(semesterKey);
+
+    if (alreadySent) {
+      this.logger.debug(
+        `Semester start message already sent for ${semesterKey}`,
+      );
+      return;
+    }
+
     this.logger.log('Sending semester start messages...');
 
     const users = await this.getUsersToNotify();
@@ -73,6 +83,8 @@ export class SemesterStartBroadcastService {
     this.logger.log(
       `Semester start broadcast completed. Success: ${success}, Blocked: ${blocked}, Errors: ${errors}`,
     );
+
+    await this.redis.set(semesterKey, '1', 'EX', 60 * 60 * 24 * 200);
 
     await this.sendStatsToAdmins(
       success,
@@ -114,6 +126,16 @@ export class SemesterStartBroadcastService {
 
     date.setDate(date.getDate() + (diff === 0 ? 0 : 7 - diff));
     return date;
+  }
+
+  private getSemesterKey(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    const semester = month >= 0 && month <= 6 ? 'spring' : 'autumn';
+
+    return `semester_start_broadcast:${year}:${semester}`;
   }
 
   private async getUsersToNotify(): Promise<User[]> {
