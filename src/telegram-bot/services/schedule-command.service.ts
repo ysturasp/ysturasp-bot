@@ -391,8 +391,8 @@ export class ScheduleCommandService {
       [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
-    await ctx.editMessageText(this.addFooterLinks(message), {
-      parse_mode: 'Markdown',
+    await ctx.editMessageText(this.addFooterLinks(message, 'HTML'), {
+      parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       ...keyboard,
     });
@@ -507,8 +507,8 @@ export class ScheduleCommandService {
       ]);
       // @ts-ignore
       if (ctx.callbackQuery) {
-        await ctx.editMessageText(this.addFooterLinks(message), {
-          parse_mode: 'Markdown',
+        await ctx.editMessageText(this.addFooterLinks(message, 'HTML'), {
+          parse_mode: 'HTML',
           link_preview_options: { is_disabled: true },
           ...keyboard,
         });

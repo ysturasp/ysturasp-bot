@@ -17,6 +17,13 @@ const LESSON_TYPES = {
   256: 'Экзамен',
 };
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export function getLessonTypeName(type: number): string {
   return LESSON_TYPES[type] || '';
 }
@@ -131,13 +138,13 @@ function formatDaySchedule(
   let msg = `📅 ${dayName} (${dateStr})\n\n`;
 
   foundLessons.forEach((lesson) => {
-    msg += `📚 ${lesson.lessonName}\n`;
+    msg += `📚 ${escapeHtml(lesson.lessonName)}\n`;
     msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
     const time = formatLessonTime(lesson);
     if (time) msg += `🕐 ${time}\n`;
     if (lesson.teacherName && type !== 'teacher')
-      msg += `👨‍🏫 ${lesson.teacherName}\n`;
-    if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
+      msg += `👨‍🏫 ${escapeHtml(lesson.teacherName)}\n`;
+    if (lesson.auditoryName) msg += `🏛 ${escapeHtml(lesson.auditoryName)}\n`;
     if (
       (type === 'teacher' || type === 'audience') &&
       lesson.groups &&
@@ -212,13 +219,13 @@ function formatWeekSchedule(
     msg += `━━━ ${dayName} ${dateStr} ━━━\n\n`;
 
     day.lessons.forEach((lesson) => {
-      msg += `📚 ${lesson.lessonName}\n`;
+      msg += `📚 ${escapeHtml(lesson.lessonName)}\n`;
       msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
       const time = formatLessonTime(lesson);
       if (time) msg += `🕐 ${time}\n`;
       if (lesson.teacherName && type !== 'teacher')
-        msg += `👨‍🏫 ${lesson.teacherName}\n`;
-      if (lesson.auditoryName) msg += `🏛 ${lesson.auditoryName}\n`;
+        msg += `👨‍🏫 ${escapeHtml(lesson.teacherName)}\n`;
+      if (lesson.auditoryName) msg += `🏛 ${escapeHtml(lesson.auditoryName)}\n`;
       if (
         (type === 'teacher' || type === 'audience') &&
         lesson.groups &&
