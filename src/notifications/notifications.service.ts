@@ -125,7 +125,7 @@ ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`.trim();
     try {
       await this.bot.telegram.sendMessage(sub.user.chatId, message);
 
-      await this.botEventRepository.save({
+      await this.analyticsService.track({
         chatId: sub.user.chatId,
         userId: sub.user.id,
         eventType: 'notification:lesson',
@@ -138,14 +138,6 @@ ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`.trim();
           auditoryName: lesson.auditoryName,
           teacherName: lesson.teacherName,
         },
-        source: 'telegram',
-      });
-
-      await this.analyticsService.track({
-        chatId: sub.user.chatId,
-        userId: sub.user.id,
-        eventType: 'notification:lesson',
-        payload: { lessonName: lesson.lessonName, groupName },
       });
 
       this.logger.log(
