@@ -17,7 +17,8 @@ const LESSON_TYPES = {
   256: 'Экзамен',
 };
 
-function escapeHtml(text: string): string {
+function escapeHtml(text: string | null | undefined): string {
+  if (!text) return '';
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
