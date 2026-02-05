@@ -60,22 +60,25 @@ export class NotificationsService {
     }
   }
 
+  private getMoscowDateString(dateInput: Date | string): string {
+    const date = new Date(dateInput);
+    const mskDate = new Date(date.getTime() + 3 * 60 * 60 * 1000);
+    return mskDate.toISOString().split('T')[0];
+  }
+
   private async checkGroupSchedule(
     groupName: string,
     schedule: any,
     groupSubs: Subscription[],
   ) {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = this.getMoscowDateString(now);
 
     let lessons = [];
 
     for (const week of schedule.items) {
       for (const day of week.days) {
-        const dayDate =
-          typeof day.info.date === 'string'
-            ? day.info.date.split('T')[0]
-            : new Date(day.info.date).toISOString().split('T')[0];
+        const dayDate = this.getMoscowDateString(day.info.date);
 
         if (dayDate === todayStr) {
           lessons = day.lessons;
