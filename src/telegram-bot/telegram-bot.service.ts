@@ -132,6 +132,9 @@ export class TelegramBotService {
   @Command('exams')
   async onExams(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
+    user.state = null;
+    user.stateData = null;
+    await this.userRepository.save(user);
     await this.scheduleCommandService.handleExams(ctx, user.id, 0);
   }
 
@@ -218,6 +221,7 @@ export class TelegramBotService {
       return;
     }
 
+    dbUser.state = null;
     dbUser.stateData = { backTarget: 'main' };
     await this.userRepository.save(dbUser);
 
@@ -821,10 +825,43 @@ export class TelegramBotService {
     await this.replyWithFooter(ctx, '💬 Напишите ваш ответ поддержке:');
   }
 
+  @Action('cancel_state')
+  async onCancelState(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    user.state = null;
+    user.stateData = null;
+    await this.userRepository.save(user);
+
+    await ctx.answerCbQuery();
+    await ctx.editMessageText('✅ Операция отменена. Можете начать заново.');
+  }
+
   @Command('subscriptions')
   async onSubscriptions(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
+    user.state = null;
+    user.stateData = { backTarget: 'settings' };
+    await this.userRepository.save(user);
     await this.subscriptionService.handleSubscriptions(ctx, user);
+  }
+
+  @Command('cancel')
+  async onCancel(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    const hadState = !!user.state;
+
+    user.state = null;
+    user.stateData = null;
+    await this.userRepository.save(user);
+
+    if (hadState) {
+      await ctx.reply(
+        '✅ Операция отменена. Можете начать заново.',
+        getMainKeyboard(),
+      );
+    } else {
+      await ctx.reply('Нечего отменять 🤷‍♂️', getMainKeyboard());
+    }
   }
 
   @Command('support')

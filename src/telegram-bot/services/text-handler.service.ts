@@ -10,13 +10,17 @@ import {
   findCanonicalGroupName,
   normalizeAudienceName,
 } from '../../helpers/group-normalizer';
-import { getFooterLinks } from '../../config/links.config';
+import { getMainKeyboard } from '../helpers/keyboard.helper';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class TextHandlerService {
   private readonly logger = new Logger(TextHandlerService.name);
 
   constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly scheduleService: ScheduleService,
     private readonly supportService: SupportService,
     private readonly pollService: PollService,
@@ -28,6 +32,33 @@ export class TextHandlerService {
     const chatType =
       (ctx.chat && (ctx.chat as any).type) ||
       ((ctx.message as any)?.chat && (ctx.message as any).chat.type);
+
+    const cancelKeywords = ['отмена', 'cancel', 'стоп', 'stop'];
+    const mainMenuButtons = [
+      '📅 Сегодня',
+      '📅 Завтра',
+      '📅 Неделя',
+      '📝 Экзамены',
+      '⚙️ Настройки',
+    ];
+
+    if (
+      user.state &&
+      (text.startsWith('/') ||
+        cancelKeywords.some((k) => text.toLowerCase().trim() === k) ||
+        mainMenuButtons.includes(text))
+    ) {
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+
+      if (!text.startsWith('/') && !mainMenuButtons.includes(text)) {
+        await ctx.reply('✅ Операция отменена. Можете начать заново.', {
+          ...getMainKeyboard(),
+        });
+        return true;
+      }
+    }
 
     if (this.isScheduleRequest(text)) {
       const keyboard = Markup.inlineKeyboard([
@@ -101,14 +132,22 @@ export class TextHandlerService {
         ctx,
         user,
         groupName,
+        true,
       );
-      if (!result) {
-        await ctx.reply(
-          `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
-          { parse_mode: 'HTML' },
-        );
+      if (result) return true;
+
+      const searched = await this.tryHandleSearch(ctx, user, text);
+      if (searched) {
+        user.state = null;
+        user.stateData = null;
+        await this.userRepository.save(user);
         return true;
       }
+
+      await ctx.reply(
+        `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
+        { parse_mode: 'HTML' },
+      );
       return true;
     }
 
@@ -119,28 +158,59 @@ export class TextHandlerService {
         ctx,
         user,
         groupName,
+        true,
       );
-      if (!result) {
-        await ctx.reply(
-          `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
-          { parse_mode: 'HTML' },
-        );
+      if (result) return true;
+
+      const searched = await this.tryHandleSearch(ctx, user, text);
+      if (searched) {
+        user.state = null;
+        user.stateData = null;
+        await this.userRepository.save(user);
         return true;
       }
+
+      await ctx.reply(
+        `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
+        { parse_mode: 'HTML' },
+      );
       return true;
     }
 
     if (user.state === 'WAITING_NOTIFY_TIME') {
-      return await this.subscriptionService.handleWaitingNotifyTime(
+      const handled = await this.subscriptionService.handleWaitingNotifyTime(
         ctx,
         user,
         text,
+        true,
       );
+      if (handled) return true;
+
+      const searched = await this.tryHandleSearch(ctx, user, text);
+      if (searched) {
+        user.state = null;
+        user.stateData = null;
+        await this.userRepository.save(user);
+        return true;
+      }
+
+      await ctx.reply(
+        '⚠️ Пожалуйста, введите корректное время (больше 0).\n\nПримеры:\n• 30 или 30 минут\n• 1 час или 1ч\n• 1.5 часа\n• 1ч 30м\n• 1 день',
+      );
+      return true;
     }
 
     if (user.state === 'SUPPORT' || user.state === 'SUGGESTION') {
-      await this.supportService.handleSupportText(ctx, user, text);
-      return true;
+      const isButtonTrigger =
+        text === '📅 Сегодня' || text === '📅 Завтра' || text === '📅 Неделя';
+      if (isButtonTrigger) {
+        user.state = null;
+        user.stateData = null;
+        await this.userRepository.save(user);
+      } else {
+        await this.supportService.handleSupportText(ctx, user, text);
+        return true;
+      }
     }
 
     if (user.state === 'ADMIN_REPLY' && user.isAdmin) {
@@ -172,6 +242,20 @@ export class TextHandlerService {
     if (user.state === 'POLL_BROADCAST' && user.isAdmin) {
       await this.pollService.handlePollBroadcast(ctx, user, text);
       return true;
+    }
+
+    return await this.tryHandleSearch(ctx, user, text);
+  }
+
+  private async tryHandleSearch(
+    ctx: Context,
+    user: User,
+    text: string,
+  ): Promise<boolean> {
+    const originalText = text.trim();
+    const extractedGroup = this.extractGroupFromMessage(text);
+    if (extractedGroup) {
+      text = extractedGroup;
     }
 
     const groups = await this.scheduleService.getGroups();
@@ -252,6 +336,13 @@ export class TextHandlerService {
       return true;
     }
 
+    return await this.handleTeacherSearch(ctx, text);
+  }
+
+  private async handleTeacherSearch(
+    ctx: Context,
+    text: string,
+  ): Promise<boolean> {
     const teachers = await this.scheduleService.getTeachers();
     const searchQuery = text.toLowerCase().trim();
 

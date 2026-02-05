@@ -29,7 +29,17 @@ export class SubscriptionService {
     user.state = 'WAITING_GROUP_SUBSCRIBE';
     user.stateData = { backTarget: user.stateData?.backTarget || 'main' };
     await this.userRepository.save(user);
-    await ctx.reply('Введите название группы (например, ЦИС-33):');
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('« Назад', 'back_dynamic'),
+        Markup.button.callback('❌ Отмена', 'cancel_state'),
+      ],
+    ]);
+
+    await ctx.reply('📝 Введите название группы (например, ЦИС-33):', {
+      reply_markup: keyboard.reply_markup,
+    });
   }
 
   async handleUnsubscribe(ctx: Context, user: User): Promise<void> {
@@ -232,7 +242,10 @@ export class SubscriptionService {
     await this.userRepository.save(user);
 
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', 'back_dynamic')],
+      [
+        Markup.button.callback('« Назад', 'back_dynamic'),
+        Markup.button.callback('❌ Отмена', 'cancel_state'),
+      ],
     ]);
 
     await ctx.editMessageText?.(
@@ -272,6 +285,7 @@ export class SubscriptionService {
           '« Назад',
           `back_to_group:${normalizedGroupName}`,
         ),
+        Markup.button.callback('❌ Отмена', 'cancel_state'),
       ],
     ]);
 
@@ -285,11 +299,18 @@ export class SubscriptionService {
     ctx: Context,
     user: User,
     groupName: string,
+    silent: boolean = false,
   ): Promise<boolean> {
     const groups = await this.scheduleService.getGroups();
     const canonicalGroupName = findCanonicalGroupName(groupName, groups);
 
     if (!canonicalGroupName) {
+      if (!silent) {
+        await ctx.reply(
+          `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
+          { parse_mode: 'HTML' },
+        );
+      }
       return false;
     }
 
@@ -321,8 +342,13 @@ export class SubscriptionService {
     };
     await this.userRepository.save(user);
 
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('❌ Отмена', 'cancel_state')],
+    ]);
+
     await ctx.reply(
       `✅ Группа ${normalizedGroupName} найдена!\n\nЗа сколько до начала занятия присылать уведомление?\n\nПримеры:\n• 30 или 30 минут\n• 1 час или 1ч\n• 1.5 часа\n• 1ч 30м\n• 1 день`,
+      keyboard,
     );
     return true;
   }
@@ -331,13 +357,16 @@ export class SubscriptionService {
     ctx: Context,
     user: User,
     timeInput: string,
+    silent: boolean = false,
   ): Promise<boolean> {
     const minutes = parseTimeToMinutes(timeInput);
 
     if (minutes === null || minutes < 1) {
-      await ctx.reply(
-        '⚠️ Пожалуйста, введите корректное время (больше 0).\n\nПримеры:\n• 30 или 30 минут\n• 1 час или 1ч\n• 1.5 часа\n• 1ч 30м\n• 1 день',
-      );
+      if (!silent) {
+        await ctx.reply(
+          '⚠️ Пожалуйста, введите корректное время (больше 0).\n\nПримеры:\n• 30 или 30 минут\n• 1 час или 1ч\n• 1.5 часа\n• 1ч 30м\n• 1 день',
+        );
+      }
       return false;
     }
 
@@ -346,9 +375,11 @@ export class SubscriptionService {
       user.state = null;
       user.stateData = null;
       await this.userRepository.save(user);
-      await ctx.reply(
-        '⚠️ Произошла ошибка (потерян контекст). Начните заново нажав /subscribe',
-      );
+      if (!silent) {
+        await ctx.reply(
+          '⚠️ Произошла ошибка (потерян контекст). Начните заново нажав /subscribe',
+        );
+      }
       return false;
     }
 
@@ -397,8 +428,18 @@ export class SubscriptionService {
     user.stateData = { backTarget: 'main' };
     await this.userRepository.save(user);
 
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('« Назад', 'back_dynamic'),
+        Markup.button.callback('❌ Отмена', 'cancel_state'),
+      ],
+    ]);
+
     await ctx.answerCbQuery();
-    await ctx.editMessageText('Введите название группы (например, ЦИС-33):');
+    await ctx.editMessageText(
+      'Введите название группы (например, ЦИС-33):',
+      keyboard,
+    );
   }
 
   async handleSelectGroupForView(ctx: Context, user: User): Promise<void> {
@@ -409,7 +450,10 @@ export class SubscriptionService {
     await this.userRepository.save(user);
 
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', 'back_dynamic')],
+      [
+        Markup.button.callback('« Назад', 'back_dynamic'),
+        Markup.button.callback('❌ Отмена', 'cancel_state'),
+      ],
     ]);
 
     await ctx.answerCbQuery();
@@ -424,7 +468,7 @@ export class SubscriptionService {
     } else {
       await ctx.reply(
         'Введите название группы для просмотра расписания (например, ЦИС-33):',
-        keyboard,
+        { reply_markup: keyboard.reply_markup },
       );
     }
   }
@@ -451,11 +495,18 @@ export class SubscriptionService {
     ctx: Context,
     user: User,
     groupName: string,
+    silent: boolean = false,
   ): Promise<boolean> {
     const groups = await this.scheduleService.getGroups();
     const canonicalGroupName = findCanonicalGroupName(groupName, groups);
 
     if (!canonicalGroupName) {
+      if (!silent) {
+        await ctx.reply(
+          `Группа <b>${groupName}</b> не найдена. Проверьте название и попробуйте ещё раз.`,
+          { parse_mode: 'HTML' },
+        );
+      }
       return false;
     }
 

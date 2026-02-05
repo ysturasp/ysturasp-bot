@@ -65,7 +65,10 @@ export class SupportService {
     const msg =
       'Пожалуйста, введите ваш запрос в следующем сообщении (допускается одна фотография или видео)';
     const kb = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', 'back_dynamic')],
+      [
+        Markup.button.callback('« Назад', 'back_dynamic'),
+        Markup.button.callback('❌ Отмена', 'cancel_state'),
+      ],
     ]);
     let menuMessageId: number;
     if (
@@ -90,7 +93,10 @@ export class SupportService {
     const msg =
       'Пожалуйста, введите ваше предложение в следующем сообщении (допускается одна фотография или видео)';
     const kb = Markup.inlineKeyboard([
-      [Markup.button.callback('« Назад', 'back_dynamic')],
+      [
+        Markup.button.callback('« Назад', 'back_dynamic'),
+        Markup.button.callback('❌ Отмена', 'cancel_state'),
+      ],
     ]);
     let menuMessageId: number;
     if (
