@@ -76,6 +76,14 @@ export class ExamNotificationsService {
     }
   }
 
+  private isExamRelevant(dateStr: string): boolean {
+    if (!dateStr) return false;
+    const examDate = new Date(dateStr);
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    return examDate > cutoff;
+  }
+
   private async checkGroupExams(
     groupName: string,
     schedule: any,
@@ -90,26 +98,32 @@ export class ExamNotificationsService {
 
       if (!existing) {
         const saved = await this.examRepository.save({ ...exam, groupName });
-        const key = `${groupName}|${saved.lessonName}|new`;
-        if (!sentNotifications.has(key)) {
-          sentNotifications.add(key);
-          await this.notifySubscribers(groupSubs, saved, 'new');
+
+        if (this.isExamRelevant(saved.date)) {
+          const key = `${groupName}|${saved.lessonName}|new`;
+          if (!sentNotifications.has(key)) {
+            sentNotifications.add(key);
+            await this.notifySubscribers(groupSubs, saved, 'new');
+          }
         }
       } else {
         if (this.hasExamChanged(existing, exam)) {
           await this.examRepository.update(existing.id, { ...exam, groupName });
-          const payload = {
-            ...existing,
-            ...exam,
-            groupName,
-            prev: existing,
-          } as Exam & {
-            prev?: Partial<Exam>;
-          };
-          const key = `${groupName}|${payload.lessonName}|changed`;
-          if (!sentNotifications.has(key)) {
-            sentNotifications.add(key);
-            await this.notifySubscribers(groupSubs, payload, 'changed');
+
+          if (this.isExamRelevant(exam.date)) {
+            const payload = {
+              ...existing,
+              ...exam,
+              groupName,
+              prev: existing,
+            } as Exam & {
+              prev?: Partial<Exam>;
+            };
+            const key = `${groupName}|${payload.lessonName}|changed`;
+            if (!sentNotifications.has(key)) {
+              sentNotifications.add(key);
+              await this.notifySubscribers(groupSubs, payload, 'changed');
+            }
           }
         }
       }
