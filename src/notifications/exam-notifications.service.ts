@@ -51,7 +51,8 @@ export class ExamNotificationsService {
 
   @Cron('*/5 * * * *')
   async checkExams() {
-    this.logger.debug('Checking for exam notifications...');
+    let sentCount = 0;
+
     const subs = await this.subscriptionRepository.find({
       where: { isActive: true },
       relations: ['user'],
@@ -59,20 +60,28 @@ export class ExamNotificationsService {
     if (subs.length === 0) return;
     const groups = [...new Set(subs.map((s) => s.groupName))];
     const sentNotifications = new Set<string>();
+
     for (const groupName of groups) {
       try {
         const normalizedGroupName = this.normalizeGroupName(groupName);
         const schedule = await this.scheduleService.getSchedule(groupName);
         if (!schedule) continue;
-        await this.checkGroupExams(
+        const count = await this.checkGroupExams(
           normalizedGroupName,
           schedule,
           subs.filter((s) => s.groupName === groupName),
           sentNotifications,
         );
+        sentCount += count;
       } catch (e) {
         this.logger.error(`Error processing group ${groupName}`, e);
       }
+    }
+
+    if (sentCount > 0) {
+      this.logger.log(
+        `Exam notification check run complete. Sent: ${sentCount}`,
+      );
     }
   }
 
@@ -89,8 +98,10 @@ export class ExamNotificationsService {
     schedule: any,
     groupSubs: Subscription[],
     sentNotifications: Set<string>,
-  ) {
+  ): Promise<number> {
     const exams = this.extractExams(schedule);
+    let sentCount = 0;
+
     for (const exam of exams) {
       const existing = await this.examRepository.findOne({
         where: { groupName, lessonName: exam.lessonName },
@@ -104,6 +115,7 @@ export class ExamNotificationsService {
           if (!sentNotifications.has(key)) {
             sentNotifications.add(key);
             await this.notifySubscribers(groupSubs, saved, 'new');
+            sentCount++;
           }
         }
       } else {
@@ -123,11 +135,13 @@ export class ExamNotificationsService {
             if (!sentNotifications.has(key)) {
               sentNotifications.add(key);
               await this.notifySubscribers(groupSubs, payload, 'changed');
+              sentCount++;
             }
           }
         }
       }
     }
+    return sentCount;
   }
 
   private extractExams(schedule: any): Partial<Exam>[] {

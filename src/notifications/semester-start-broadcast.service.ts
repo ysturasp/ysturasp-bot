@@ -27,10 +27,7 @@ export class SemesterStartBroadcastService {
 
   @Cron('0 8 * * *', { timeZone: 'Europe/Moscow' })
   async sendSemesterStartMessage() {
-    this.logger.debug('Checking if today is semester start...');
-
     if (!this.isSemesterStart()) {
-      this.logger.debug('Today is not semester start');
       return;
     }
 
@@ -38,9 +35,6 @@ export class SemesterStartBroadcastService {
     const alreadySent = await this.redis.get(semesterKey);
 
     if (alreadySent) {
-      this.logger.debug(
-        `Semester start message already sent for ${semesterKey}`,
-      );
       return;
     }
 

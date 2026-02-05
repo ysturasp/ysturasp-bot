@@ -293,15 +293,15 @@ export class GradeNotificationsService {
     return message;
   }
 
-  private async checkUserGrades(user: User): Promise<void> {
+  private async checkUserGrades(user: User): Promise<boolean> {
     try {
       if (!user.chatId || !user.ystuId) {
-        return;
+        return false;
       }
 
       const accessToken = await this.getValidAccessToken(user.id);
       if (!accessToken) {
-        return;
+        return false;
       }
 
       const currentMarks = await this.getMarks(accessToken);
@@ -309,7 +309,7 @@ export class GradeNotificationsService {
 
       if (!savedGrades) {
         await this.saveUserGrades(user.id, currentMarks);
-        return;
+        return false;
       }
 
       const changes = this.compareGrades(savedGrades.marks, currentMarks);
@@ -338,6 +338,8 @@ export class GradeNotificationsService {
           this.logger.log(
             `Grade notification sent to user ${user.id} (chatId: ${user.chatId})`,
           );
+          await this.saveUserGrades(user.id, currentMarks);
+          return true;
         } catch (error: any) {
           this.logger.error(
             `Failed to send grade notification to ${user.chatId}:`,
@@ -347,6 +349,7 @@ export class GradeNotificationsService {
       }
 
       await this.saveUserGrades(user.id, currentMarks);
+      return false;
     } catch (error: any) {
       this.logger.error(`Error checking grades for user ${user.id}:`, error);
       if (
@@ -355,6 +358,7 @@ export class GradeNotificationsService {
       ) {
         throw error;
       }
+      return false;
     }
   }
 
@@ -373,9 +377,9 @@ export class GradeNotificationsService {
   }
 
   private async checkAllUserGradesInternal() {
-    this.logger.debug(
-      'Checking grades for all users with notifications enabled...',
-    );
+    let checkedCount = 0;
+    let sentCount = 0;
+    let errorCount = 0;
 
     try {
       const columnCheck = await this.dataSource.query(`
@@ -390,7 +394,7 @@ export class GradeNotificationsService {
           await this.dataSource.query(
             `ALTER TABLE ystu_tokens ADD COLUMN grade_notifications_enabled BOOLEAN NOT NULL DEFAULT TRUE`,
           );
-          this.logger.debug(
+          this.logger.log(
             'Added grade_notifications_enabled column to ystu_tokens',
           );
         } catch (e: any) {
@@ -437,16 +441,29 @@ export class GradeNotificationsService {
         });
 
         if (user && user.chatId && user.ystuId) {
-          await this.checkUserGrades(user).catch((error) => {
-            if (error.message?.includes('429')) {
-              this.logger.warn(`Rate limit (429) hit for user ${user.id}`);
-            }
-            this.logger.error(
-              `Error checking grades for user ${user.id}:`,
-              error,
-            );
-          });
+          checkedCount++;
+          await this.checkUserGrades(user)
+            .then((sent) => {
+              if (sent) sentCount++;
+            })
+            .catch((error) => {
+              errorCount++;
+              if (error.message?.includes('429')) {
+                this.logger.warn(`Rate limit (429) hit for user ${user.id}`);
+              } else {
+                this.logger.error(
+                  `Error checking grades for user ${user.id}:`,
+                  error,
+                );
+              }
+            });
         }
+      }
+
+      if (sentCount > 0 || errorCount > 0) {
+        this.logger.log(
+          `Grades check completed. Checked: ${checkedCount}, Sent: ${sentCount}, Errors: ${errorCount}`,
+        );
       }
     } catch (error) {
       this.logger.error('Error in grade check cron job:', error);

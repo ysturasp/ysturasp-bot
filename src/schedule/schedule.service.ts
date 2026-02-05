@@ -131,15 +131,9 @@ export class ScheduleService {
             );
 
             if (ageMinutes < freshThreshold) {
-              this.logger.log(
-                `Cache hit for group: ${groupName} (age: ${ageMinutes.toFixed(1)} min)`,
-              );
               const { timestamp, ...data } = cached;
               return data;
             } else {
-              this.logger.log(
-                `Cache stale for group: ${groupName} (age: ${ageMinutes.toFixed(1)} min), will try to refresh`,
-              );
             }
           } catch (e) {
             this.logger.debug('Failed to parse schedule cache', e);
@@ -153,9 +147,12 @@ export class ScheduleService {
 
           while (true) {
             try {
-              this.logger.log(
-                `Fetching schedule for group: ${groupName} (attempt ${attempt + 1})`,
-              );
+              if (attempt > 0) {
+                this.logger.warn(
+                  `Fetching schedule for group: ${groupName} (retry ${attempt})`,
+                );
+              }
+
               const token = this.configService.get<string>('ACCESS_TOKEN');
               const { data } = await firstValueFrom(
                 this.httpService.get(
@@ -180,7 +177,6 @@ export class ScheduleService {
                   'EX',
                   ttl,
                 );
-                this.logger.log(`Updated cache for group: ${groupName}`);
               } catch (e) {
                 this.logger.debug('Failed to set schedule cache', e);
               }

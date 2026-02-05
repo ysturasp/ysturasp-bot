@@ -31,32 +31,52 @@ export class NotificationsService {
     return groupName.trim().toUpperCase();
   }
 
+  private isRunning = false;
+
   @Cron('0 * * * * *')
   async handleCron() {
-    this.logger.debug('Checking for notifications...');
+    if (this.isRunning) {
+      this.logger.debug('Previous cron job still running, skipping...');
+      return;
+    }
+    this.isRunning = true;
+    let sentCount = 0;
+    let errorCount = 0;
 
-    const subs = await this.subscriptionRepository.find({
-      where: { isActive: true },
-      relations: ['user'],
-    });
-    if (subs.length === 0) return;
+    try {
+      const subs = await this.subscriptionRepository.find({
+        where: { isActive: true },
+        relations: ['user'],
+      });
+      if (subs.length === 0) return;
 
-    const groups = [...new Set(subs.map((s) => s.groupName))];
+      const groups = [...new Set(subs.map((s) => s.groupName))];
 
-    for (const groupName of groups) {
-      try {
-        const normalizedGroupName = this.normalizeGroupName(groupName);
-        const schedule = await this.scheduleService.getSchedule(groupName);
-        if (!schedule) continue;
+      for (const groupName of groups) {
+        try {
+          const normalizedGroupName = this.normalizeGroupName(groupName);
+          const schedule = await this.scheduleService.getSchedule(groupName);
+          if (!schedule) continue;
 
-        await this.checkGroupSchedule(
-          normalizedGroupName,
-          schedule,
-          subs.filter((s) => s.groupName === groupName),
-        );
-      } catch (e) {
-        this.logger.error(`Error processing group ${groupName}`, e);
+          const count = await this.checkGroupSchedule(
+            normalizedGroupName,
+            schedule,
+            subs.filter((s) => s.groupName === groupName),
+          );
+          sentCount += count;
+        } catch (e) {
+          errorCount++;
+          this.logger.error(`Error processing group ${groupName}`, e);
+        }
       }
+
+      if (sentCount > 0 || errorCount > 0) {
+        this.logger.log(
+          `Notification check run complete. Sent: ${sentCount}, Errors: ${errorCount}`,
+        );
+      }
+    } finally {
+      this.isRunning = false;
     }
   }
 
@@ -70,11 +90,12 @@ export class NotificationsService {
     groupName: string,
     schedule: any,
     groupSubs: Subscription[],
-  ) {
+  ): Promise<number> {
     const now = new Date();
     const todayStr = this.getMoscowDateString(now);
 
     let lessons = [];
+    let sentCount = 0;
 
     for (const week of schedule.items) {
       for (const day of week.days) {
@@ -87,7 +108,7 @@ export class NotificationsService {
       }
     }
 
-    if (lessons.length === 0) return;
+    if (lessons.length === 0) return 0;
 
     for (const lesson of lessons) {
       const startAt = new Date(lesson.startAt);
@@ -106,10 +127,12 @@ export class NotificationsService {
           if (!alreadySent) {
             await this.sendNotification(sub, lesson, groupName);
             await this.redis.set(redisKey, '1', 'EX', 60 * 60 * 24);
+            sentCount++;
           }
         }
       }
     }
+    return sentCount;
   }
 
   private async sendNotification(
