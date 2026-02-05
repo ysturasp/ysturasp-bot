@@ -21,6 +21,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RedisModule } from './redis/redis.module';
+import { LoggerModule } from './logger/logger.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { RedisModule } from './redis/redis.module';
     ScheduleModule,
     NotificationsModule,
     RedisModule,
+    LoggerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

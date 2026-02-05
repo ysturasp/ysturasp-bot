@@ -7,14 +7,19 @@ import { convertToPersianDate } from './helpers/converToPersianDate';
 
 const PORT = process.env.PORT || 5500;
 
+import { RedisLogger } from './logger/redis-logger.service';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     cors: true,
+    bufferLogs: true,
     logger:
       process.env.NODE_ENV === 'production'
         ? ['error', 'warn', 'log']
         : ['error', 'warn', 'log', 'debug', 'verbose'],
   });
+
+  app.useLogger(app.get(RedisLogger));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

@@ -1,8 +1,9 @@
 import { Action, Command, Ctx, On, Start, Update } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
+import Redis from 'ioredis';
 import { User } from '../database/entities/user.entity';
 import { Subscription } from '../database/entities/subscription.entity';
 import { ScheduleService } from '../schedule/schedule.service';
@@ -30,6 +31,7 @@ export class TelegramBotService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    @Inject('REDIS') private readonly redis: Redis,
     private readonly entityManager: EntityManager,
     private readonly scheduleService: ScheduleService,
     private readonly configService: ConfigService,
@@ -95,6 +97,36 @@ export class TelegramBotService {
       link_preview_options: { is_disabled: true },
       ...extra,
     });
+  }
+
+  @Command('logs')
+  async onLogs(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) return;
+
+    const logs = await this.redis.lrange('app:logs', 0, 99);
+    if (!logs || logs.length === 0) {
+      await ctx.reply('Logs are empty.');
+      return;
+    }
+
+    const formattedLogs = logs
+      .map((l) => {
+        try {
+          const j = JSON.parse(l);
+          return `[${j.timestamp}] [${j.level.toUpperCase()}] [${j.context}] ${j.message}`;
+        } catch {
+          return l;
+        }
+      })
+      .join('\n');
+
+    if (formattedLogs.length > 4000) {
+      const buffer = Buffer.from(formattedLogs);
+      await ctx.replyWithDocument({ source: buffer, filename: 'logs.txt' });
+    } else {
+      await ctx.reply(`Last 100 logs:\n\n${formattedLogs}`);
+    }
   }
 
   @Command('exams')
