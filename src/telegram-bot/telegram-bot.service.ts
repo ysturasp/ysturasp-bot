@@ -76,18 +76,22 @@ export class TelegramBotService {
     return info;
   }
 
-  private addFooterLinks(message: string): string {
-    return message + getFooterLinks();
+  private addFooterLinks(
+    message: string,
+    parseMode: 'Markdown' | 'HTML' = 'HTML',
+  ): string {
+    return message + getFooterLinks(parseMode);
   }
 
   private async replyWithFooter(
     ctx: Context,
     message: string,
-    extra?: any,
+    extra: any = {},
   ): Promise<any> {
-    const messageWithFooter = this.addFooterLinks(message);
+    const parseMode = extra.parse_mode || 'HTML';
+    const messageWithFooter = this.addFooterLinks(message, parseMode);
     return ctx.reply(messageWithFooter, {
-      parse_mode: 'Markdown',
+      parse_mode: parseMode,
       link_preview_options: { is_disabled: true },
       ...extra,
     });
@@ -185,7 +189,10 @@ export class TelegramBotService {
     dbUser.stateData = { backTarget: 'main' };
     await this.userRepository.save(dbUser);
 
-    let message = `👋 Привет, ${user.first_name}! это ysturasp бот`;
+    const escapeHtml = (unsafe: string) =>
+      unsafe.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    let message = `👋 Привет, ${escapeHtml(user.first_name)}! это ysturasp бот`;
 
     const mainButtons = [
       [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
@@ -227,7 +234,9 @@ export class TelegramBotService {
 
 💬 Также у нас есть телеграм-канал с новостями и обновлениями — @ysturasp`;
 
-    await this.replyWithFooter(ctx, message, {
+    await ctx.reply(message, {
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true },
       ...getMainKeyboard(),
       ...Markup.inlineKeyboard(mainButtons),
     });
