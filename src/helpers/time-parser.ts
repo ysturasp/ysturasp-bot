@@ -51,9 +51,6 @@ export function parseTimeToMinutes(input: string): number | null {
   return null;
 }
 
-/**
- * Форматирует количество минут в читаемую строку
- */
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) {
     return `${minutes} мин`;
