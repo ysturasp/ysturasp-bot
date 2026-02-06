@@ -71,7 +71,7 @@ function formatLessonTime(lesson: any): string | null {
 
 export function formatSchedule(
   schedule: any,
-  dayOffset: number | 'week',
+  dayOffset: number | 'week' | Date,
   groupName: string,
   weekOffset = 0,
   type: 'student' | 'teacher' | 'audience' = 'student',
@@ -84,9 +84,18 @@ export function formatSchedule(
     return formatWeekSchedule(schedule, groupName, weekOffset, type);
   }
 
+  if (dayOffset instanceof Date) {
+    return formatDaySchedule(
+      schedule,
+      toMoscowStartOfDay(dayOffset),
+      groupName,
+      type,
+    );
+  }
+
   const date = toMoscowStartOfDay(new Date());
-  if (dayOffset === 1) {
-    date.setDate(date.getDate() + 1);
+  if (dayOffset !== 0) {
+    date.setDate(date.getDate() + dayOffset);
   }
 
   return formatDaySchedule(schedule, date, groupName, type);

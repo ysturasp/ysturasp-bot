@@ -441,7 +441,8 @@ export class ScheduleCommandService {
   async handleScheduleRequest(
     ctx: Context,
     userId: string,
-    dayOffset: number | 'week',
+    dayOffset: number | 'week' | Date,
+    weekOffset = 0,
   ): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
@@ -484,7 +485,6 @@ export class ScheduleCommandService {
     const schedule = await this.scheduleService.getSchedule(groupName);
 
     if (dayOffset === 'week') {
-      const weekOffset = 0;
       const message = formatSchedule(
         schedule,
         'week',

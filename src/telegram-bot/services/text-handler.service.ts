@@ -13,6 +13,12 @@ import {
 import { getMainKeyboard } from '../helpers/keyboard.helper';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  parseRussianDate,
+  parseRussianDayOfWeek,
+  getOffsetForDayOfWeek,
+  parseRussianDateRange,
+} from '../../helpers/date-parser';
 
 @Injectable()
 export class TextHandlerService {
@@ -72,10 +78,12 @@ export class TextHandlerService {
       return true;
     }
 
+    const lowerText = text.toLowerCase().trim();
     if (
       text === '📅 Сегодня' ||
       text === '/today' ||
-      text.toLowerCase() === 'сегодня'
+      lowerText === 'сегодня' ||
+      lowerText === 'расписание на сегодня'
     ) {
       await this.scheduleCommandService.handleScheduleRequest(ctx, user.id, 0);
       return true;
@@ -83,7 +91,8 @@ export class TextHandlerService {
     if (
       text === '📅 Завтра' ||
       text === '/tomorrow' ||
-      text.toLowerCase() === 'завтра'
+      lowerText === 'завтра' ||
+      lowerText === 'расписание на завтра'
     ) {
       await this.scheduleCommandService.handleScheduleRequest(ctx, user.id, 1);
       return true;
@@ -91,8 +100,21 @@ export class TextHandlerService {
     if (
       text === '📅 Неделя' ||
       text === '/week' ||
-      text.toLowerCase() === 'неделя'
+      lowerText.startsWith('неделя') ||
+      lowerText === 'расписание на неделю'
     ) {
+      const range = parseRussianDateRange(text);
+      if (range) {
+        const offset = this.calculateWeekOffset(range.start);
+        await this.scheduleCommandService.handleScheduleRequest(
+          ctx,
+          user.id,
+          'week',
+          offset,
+        );
+        return true;
+      }
+
       await this.scheduleCommandService.handleScheduleRequest(
         ctx,
         user.id,
@@ -107,6 +129,46 @@ export class TextHandlerService {
       text.toLowerCase() === 'экзамены'
     ) {
       await this.scheduleCommandService.handleExams(ctx, user.id);
+      return true;
+    }
+
+    if (text.toLowerCase().trim() === 'месяц') {
+      await ctx.reply(
+        '⚠️ Расписание на месяц слишком большое для одного сообщения. Пожалуйста, используйте просмотр по неделям.',
+      );
+      return true;
+    }
+
+    const soloRange = parseRussianDateRange(text);
+    if (soloRange) {
+      const offset = this.calculateWeekOffset(soloRange.start);
+      await this.scheduleCommandService.handleScheduleRequest(
+        ctx,
+        user.id,
+        'week',
+        offset,
+      );
+      return true;
+    }
+
+    const dayOfWeek = parseRussianDayOfWeek(text);
+    if (dayOfWeek !== null) {
+      const offset = getOffsetForDayOfWeek(dayOfWeek);
+      await this.scheduleCommandService.handleScheduleRequest(
+        ctx,
+        user.id,
+        offset,
+      );
+      return true;
+    }
+
+    const specificDate = parseRussianDate(text);
+    if (specificDate) {
+      await this.scheduleCommandService.handleScheduleRequest(
+        ctx,
+        user.id,
+        specificDate,
+      );
       return true;
     }
 
@@ -455,9 +517,6 @@ export class TextHandlerService {
       'рачписание',
       'рачсписание',
       'расрисание',
-      'расписание на сегодня',
-      'расписание на завтра',
-      'расписание на неделю',
       'покажи расписание',
       'показать расписание',
       'hfcgbcfybt',
@@ -505,6 +564,22 @@ export class TextHandlerService {
     }
 
     return null;
+  }
+
+  private calculateWeekOffset(targetDate: Date): number {
+    const now = new Date();
+    const currentMonday = new Date(now);
+    const currentDay = now.getDay() || 7;
+    currentMonday.setDate(now.getDate() - (currentDay - 1));
+    currentMonday.setHours(0, 0, 0, 0);
+
+    const targetMonday = new Date(targetDate);
+    const targetDay = targetDate.getDay() || 7;
+    targetMonday.setDate(targetDate.getDate() - (targetDay - 1));
+    targetMonday.setHours(0, 0, 0, 0);
+
+    const diffMs = targetMonday.getTime() - currentMonday.getTime();
+    return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
   }
 
   getHelpMessage(): string {
