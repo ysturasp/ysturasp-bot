@@ -22,7 +22,11 @@ import { AnalyticsService } from '../analytics/analytics.service';
 import { getFooterLinks } from '../config/links.config';
 import { GroqService } from '../ai/groq.service';
 import { AiLimitService } from '../ai/ai-limit.service';
+import { AiSubscriptionService } from '../ai/ai-subscription.service';
 import { UserAiContext } from '../database/entities/user-ai-context.entity';
+import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
+import { YooCheckout, ICreateRefund } from '@a2seven/yoo-checkout';
+import * as crypto from 'crypto';
 
 @Update()
 @Injectable()
@@ -50,9 +54,37 @@ export class TelegramBotService {
     private readonly analyticsService: AnalyticsService,
     private readonly groqService: GroqService,
     private readonly aiLimitService: AiLimitService,
+    private readonly aiSubscriptionService: AiSubscriptionService,
     @InjectRepository(UserAiContext)
     private readonly aiContextRepository: Repository<UserAiContext>,
+    @InjectRepository(UserAiPayment)
+    private readonly aiPaymentRepository: Repository<UserAiPayment>,
   ) {}
+
+  private getRefundCheckoutClient(): YooCheckout | null {
+    const shopId = this.configService.get<string>('YOOKASSA_SHOP_ID');
+    const secretKey = this.configService.get<string>('YOOKASSA_SECRET_KEY');
+    if (!shopId || !secretKey) return null;
+    return new YooCheckout({ shopId, secretKey });
+  }
+
+  private getRefundWindowMs(): number {
+    const days = this.configService.get<number>('AI_PLUS_REFUND_WINDOW_DAYS');
+    if (days && days > 0) return days * 24 * 60 * 60 * 1000;
+    const minutes = this.configService.get<number>(
+      'AI_PLUS_REFUND_GRACE_MINUTES',
+      60,
+    );
+    return minutes * 60 * 1000;
+  }
+
+  private isRefundRequireUnused(): boolean {
+    const v = this.configService.get<string>(
+      'AI_PLUS_REFUND_REQUIRE_UNUSED',
+      '1',
+    );
+    return v !== '0' && v.toLowerCase() !== 'false';
+  }
 
   private async getUserInfoForAdmin(user: User): Promise<string> {
     const name =
@@ -240,15 +272,16 @@ export class TelegramBotService {
     const mainButtons = [
       [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
       [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
+      [Markup.button.callback('👤 Профиль', 'open_profile')],
+      [
+        Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
+        Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
+      ],
       [
         Markup.button.callback(
           '⭐ Поддержать звездами',
           'open_support_stars:main',
         ),
-      ],
-      [
-        Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
-        Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
       ],
       [
         Markup.button.url(
@@ -310,28 +343,484 @@ export class TelegramBotService {
         ? `⏳ Ближайший сброс лимитов: <b>${stats.soonestReset.toLocaleTimeString('ru-RU')}</b>`
         : `🚀 Все ключи готовы к работе!`);
 
-    await this.replyWithFooter(ctx, message);
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('🔍 Проверить ключи', 'ai_check_keys')],
+    ]);
+
+    await this.replyWithFooter(ctx, message, keyboard as any);
+  }
+
+  @Command('ai_check_keys')
+  async onAiCheckKeys(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('Доступно только администраторам');
+      return;
+    }
+
+    await ctx.reply('⏳ Проверяю ключи Groq...');
+
+    const results = await this.groqService.checkAllKeysHealth();
+
+    if (!results.length) {
+      await ctx.reply('🔍 Ключи Groq не найдены в базе.');
+      return;
+    }
+
+    const lines: string[] = ['🔍 <b>Проверка ключей Groq</b>', ''];
+    for (const r of results) {
+      const statusLabel = !r.isActive
+        ? '🚫 деактивирован'
+        : r.ok
+          ? '✅ OK'
+          : '❌ ошибка';
+      const statusCode = r.status ? ` (HTTP ${r.status})` : '';
+      lines.push(
+        `• <code>${r.keyPrefix}******</code>: ${statusLabel}${statusCode}${
+          r.error ? ` — ${r.error}` : ''
+        }`,
+      );
+    }
+
+    await ctx.reply(lines.join('\n'), {
+      parse_mode: 'HTML',
+    } as any);
+  }
+
+  @Action('ai_check_keys')
+  async onAiCheckKeysAction(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    await this.onAiCheckKeys(ctx);
   }
 
   @Command('profile')
   async onProfile(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
+    await this.renderProfile(ctx, user);
+  }
+
+  @Action('open_profile')
+  async onOpenProfile(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+    await this.renderProfile(ctx, user);
+  }
+
+  private async renderProfile(ctx: Context, user: User): Promise<void> {
     await this.aiLimitService.checkAndResetLimits(user);
 
     const remaining = await this.aiLimitService.getRemainingRequests(user);
+    const limit = await this.aiLimitService.getMonthlyLimit(user);
     const resetDate = await this.aiLimitService.getNextResetDate(user);
     const model = user.aiModel || 'llama-3.3-70b-versatile';
+    const plusSub =
+      await this.aiSubscriptionService.getActiveSubscription(user);
+    const planLabel = plusSub
+      ? `Plus (до ${plusSub.expiresAt.toLocaleDateString('ru-RU')})`
+      : 'Free';
+
+    const rows: any[] = [
+      [
+        Markup.button.callback('⚙️ Модель', 'profile_mode'),
+        Markup.button.callback('🧹 Сброс контекста', 'profile_reset'),
+      ],
+    ];
+    if (plusSub) {
+      rows.push([
+        Markup.button.callback('⚙️ Управление AI Plus', 'open_ai_plus_manage'),
+      ]);
+    } else {
+      rows.push([
+        Markup.button.callback('⬆️ Улучшить тариф (AI Plus)', 'open_ai_plus'),
+      ]);
+    }
+    rows.push([
+      Markup.button.callback('⬅️ Главное меню', 'back_to_main_profile'),
+    ]);
 
     const message =
       `👤 <b>Ваш профиль:</b>\n` +
       `🆔 ID: <code>${user.chatId}</code>\n` +
-      `💳 Подписка: <b>Free</b>\n\n` +
-      `🤖 Текущая модель: <code>${model}</code>\n` +
-      `⏳ Осталось запросов: <b>${remaining}/50</b>\n` +
-      `📅 Сброс лимитов: <b>${resetDate.toLocaleDateString('ru-RU')}</b>\n\n` +
-      `Используйте /mode для смены модели или /reset для очистки контекста.`;
+      `💳 Тариф: <b>${planLabel}</b>\n\n` +
+      `🤖 Модель: <code>${model}</code>\n` +
+      `⏳ Осталось запросов: <b>${remaining}/${limit}</b>\n` +
+      `📅 Сброс лимитов: <b>${resetDate.toLocaleDateString('ru-RU')}</b>`;
 
-    await this.replyWithFooter(ctx, message);
+    const keyboard = Markup.inlineKeyboard(rows);
+
+    const parseMode: 'HTML' = 'HTML';
+    const textWithFooter = this.addFooterLinks(message, parseMode);
+    const isCallback = !!ctx.callbackQuery;
+
+    try {
+      if (isCallback) {
+        await ctx.editMessageText(textWithFooter, {
+          parse_mode: parseMode,
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        } as any);
+      } else {
+        await ctx.reply(textWithFooter, {
+          parse_mode: parseMode,
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        });
+      }
+    } catch {
+      await this.replyWithFooter(ctx, message, keyboard as any);
+    }
+  }
+
+  @Action('profile_mode')
+  async onProfileMode(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    await this.onMode(ctx);
+  }
+
+  @Action('profile_reset')
+  async onProfileReset(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+    await this.aiContextRepository.delete({ user: { id: user.id } as any });
+    await this.renderProfile(ctx, user);
+    await ctx.answerCbQuery('Контекст очищен');
+  }
+
+  @Action('back_to_main_profile')
+  async onBackToMainProfile(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+
+    const fromUser = ctx.from;
+    const dbUser = user;
+
+    let message = `👋 Привет, ${fromUser?.first_name || ''}! это ysturasp бот`;
+
+    const mainButtons = [
+      [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
+      [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
+      [Markup.button.callback('👤 Профиль', 'open_profile')],
+      [
+        Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
+        Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
+      ],
+      [
+        Markup.button.callback(
+          '⭐ Поддержать звездами',
+          'open_support_stars:main',
+        ),
+      ],
+      [
+        Markup.button.url(
+          'Открыть приложение',
+          'https://t.me/ysturasp_bot/ysturasp_webapp',
+        ),
+      ],
+    ];
+
+    if (dbUser.isAdmin) {
+      mainButtons.push(
+        [
+          Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
+          Markup.button.callback('📢 Рассылка', 'open_broadcast'),
+        ],
+        [Markup.button.callback('📊 Аналитика', 'open_analytics')],
+      );
+    }
+
+    message += `\n\nТакже вы можете просто ввести название группы (например, ЦИС-33), чтобы посмотреть расписание или подписаться на уведомления.`;
+
+    const keyboard = Markup.inlineKeyboard(mainButtons);
+    const isCallback = !!ctx.callbackQuery;
+    try {
+      if (isCallback) {
+        await ctx.editMessageText(message, keyboard as any);
+      } else {
+        await ctx.reply(message, keyboard as any);
+      }
+    } catch {
+      await this.replyWithFooter(ctx, message, keyboard as any);
+    }
+  }
+
+  @Command('plus_manage')
+  async onPlusManage(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await this.renderPlusManage(ctx, user);
+  }
+
+  @Action('open_ai_plus_manage')
+  async onOpenAiPlusManage(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+    await this.renderPlusManage(ctx, user);
+  }
+
+  @Action(/^ai_plus_refund_confirm:(.+)$/)
+  async onAiPlusRefundConfirm(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    // @ts-ignore
+    const paymentId = ctx.match[1];
+    const kb = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          '✅ Подтвердить возврат',
+          `ai_plus_refund_do:${paymentId}`,
+        ),
+      ],
+      [Markup.button.callback('Отмена', 'ai_plus_refund_cancel')],
+    ]);
+    await ctx.reply(
+      '⚠️ Подтвердите возврат.\n\n' +
+        'Отмена с возвратом возможна только если подписка не использовалась и вы уложились в окно возврата.',
+      kb,
+    );
+  }
+
+  @Action('ai_plus_refund_cancel')
+  async onAiPlusRefundCancel(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery('Ок');
+  }
+
+  private async renderPlusManage(ctx: Context, user: User): Promise<void> {
+    const plusSub =
+      await this.aiSubscriptionService.getActiveSubscription(user);
+
+    if (!plusSub) {
+      const text = 'ℹ️ У вас нет активной подписки <b>AI Plus</b>.';
+      const isCallback = !!ctx.callbackQuery;
+      const parseMode: 'HTML' = 'HTML';
+      const withFooter = this.addFooterLinks(text, parseMode);
+      try {
+        if (isCallback) {
+          await ctx.editMessageText(withFooter, {
+            parse_mode: parseMode,
+            link_preview_options: { is_disabled: true },
+          } as any);
+        } else {
+          await ctx.reply(withFooter, {
+            parse_mode: parseMode,
+            link_preview_options: { is_disabled: true },
+          });
+        }
+      } catch {
+        await this.replyWithFooter(ctx, text);
+      }
+      return;
+    }
+
+    const refundWindowMs = this.getRefundWindowMs();
+    const refundRequireUnused = this.isRefundRequireUnused();
+    const now = new Date();
+
+    const lastPayment = await this.aiPaymentRepository.findOne({
+      where: {
+        user: { id: user.id } as any,
+        payload: 'ai_plus_1m',
+        status: 'succeeded',
+      },
+      order: { createdAt: 'DESC' },
+      relations: ['user'],
+    });
+
+    const usage = await this.aiLimitService.getUsageSnapshot(user);
+    const isWithinGrace =
+      !!lastPayment &&
+      now.getTime() - lastPayment.createdAt.getTime() <= refundWindowMs;
+    const isUnused =
+      !!lastPayment &&
+      usage.monthlyCount === lastPayment.usageMonthlyCountAtPurchase &&
+      usage.weeklyCount === lastPayment.usageWeeklyCountAtPurchase;
+    const isSameSubscription =
+      !!lastPayment && lastPayment.subscriptionId === plusSub.id;
+
+    const refundClient = this.getRefundCheckoutClient();
+    const refundAvailable = !!refundClient;
+
+    const canRefund =
+      refundAvailable &&
+      !!lastPayment &&
+      !!lastPayment.providerPaymentChargeId &&
+      isSameSubscription &&
+      isWithinGrace &&
+      (!refundRequireUnused || isUnused);
+
+    const lines: string[] = [
+      `💳 <b>AI Plus</b>`,
+      `Действует до: <b>${plusSub.expiresAt.toLocaleDateString('ru-RU')}</b>`,
+      '',
+      `Лимит: <b>200 запросов/месяц</b> (не суммируется при повторной покупке).`,
+      '',
+      `Возврат платежа: в течение заданного окна после оплаты${
+        refundRequireUnused
+          ? ' и только если после оплаты не было запросов к ИИ'
+          : ''
+      }.`,
+    ];
+
+    if (!refundAvailable) {
+      lines.push('', 'ℹ️ Возврат недоступен: не настроены ключи ЮKassa API.');
+    } else if (!lastPayment) {
+      lines.push('', 'ℹ️ Не нашёл платёж AI Plus для возврата.');
+    } else if (!isSameSubscription) {
+      lines.push(
+        '',
+        'ℹ️ Возврат доступен только для последней покупки (продления).',
+      );
+    } else if (!isWithinGrace) {
+      lines.push('', 'ℹ️ Окно возврата уже прошло.');
+    } else if (refundRequireUnused && !isUnused) {
+      lines.push(
+        '',
+        'ℹ️ После оплаты уже были запросы к ИИ — возврат недоступен.',
+      );
+    } else if (!lastPayment.providerPaymentChargeId) {
+      lines.push('', 'ℹ️ Не удалось определить payment_id для возврата.');
+    } else {
+      lines.push('', '✅ Возврат доступен: подписка не использовалась.');
+    }
+
+    const kbRows: any[] = [];
+    if (canRefund) {
+      kbRows.push([
+        Markup.button.callback(
+          '❌ Отменить подписку и вернуть деньги',
+          `ai_plus_refund_confirm:${lastPayment!.id}`,
+        ),
+      ]);
+    }
+    kbRows.push([Markup.button.callback('⬅️ Назад к профилю', 'open_profile')]);
+
+    const keyboard = Markup.inlineKeyboard(kbRows);
+
+    const parseMode: 'HTML' = 'HTML';
+    const withFooter = this.addFooterLinks(lines.join('\n'), parseMode);
+    const isCallback = !!ctx.callbackQuery;
+    try {
+      if (isCallback) {
+        await ctx.editMessageText(withFooter, {
+          parse_mode: parseMode,
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        } as any);
+      } else {
+        await ctx.reply(withFooter, {
+          parse_mode: parseMode,
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        });
+      }
+    } catch {
+      await this.replyWithFooter(ctx, lines.join('\n'), keyboard as any);
+    }
+  }
+
+  @Action(/^ai_plus_refund_do:(.+)$/)
+  async onAiPlusRefundDo(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery('⏳ Оформляю возврат...');
+    // @ts-ignore
+    const paymentId = ctx.match[1];
+    const user = await this.userHelperService.getUser(ctx);
+
+    const paymentRow = await this.aiPaymentRepository.findOne({
+      where: { id: paymentId, user: { id: user.id } as any },
+      relations: ['user'],
+    });
+
+    if (!paymentRow || paymentRow.payload !== 'ai_plus_1m') {
+      await ctx.reply('❌ Платёж не найден.');
+      return;
+    }
+    if (paymentRow.status !== 'succeeded') {
+      await ctx.reply(
+        'ℹ️ Этот платёж уже возвращён или недоступен для возврата.',
+      );
+      return;
+    }
+
+    const refundWindowMs = this.getRefundWindowMs();
+    const refundRequireUnused = this.isRefundRequireUnused();
+    const now = new Date();
+    if (now.getTime() - paymentRow.createdAt.getTime() > refundWindowMs) {
+      await ctx.reply('❌ Окно возврата уже прошло.');
+      return;
+    }
+
+    const plusSub =
+      await this.aiSubscriptionService.getActiveSubscription(user);
+    if (
+      !plusSub ||
+      !paymentRow.subscriptionId ||
+      paymentRow.subscriptionId !== plusSub.id
+    ) {
+      await ctx.reply('❌ Возврат доступен только для последней покупки.');
+      return;
+    }
+
+    const usage = await this.aiLimitService.getUsageSnapshot(user);
+    const isUnused =
+      usage.monthlyCount === paymentRow.usageMonthlyCountAtPurchase &&
+      usage.weeklyCount === paymentRow.usageWeeklyCountAtPurchase;
+    if (refundRequireUnused && !isUnused) {
+      await ctx.reply(
+        '❌ После оплаты уже были запросы к ИИ — возврат недоступен.',
+      );
+      return;
+    }
+
+    const checkout = this.getRefundCheckoutClient();
+    if (!checkout) {
+      await ctx.reply('❌ Самовозврат не настроен (нет ключей ЮKassa API).');
+      return;
+    }
+    if (!paymentRow.providerPaymentChargeId) {
+      await ctx.reply('❌ Не удалось определить payment_id для возврата.');
+      return;
+    }
+
+    const amountValue = (paymentRow.amountKops / 100).toFixed(2);
+    const refundPayload: ICreateRefund = {
+      payment_id: paymentRow.providerPaymentChargeId,
+      amount: {
+        value: amountValue,
+        currency: paymentRow.currency || 'RUB',
+      },
+    };
+    const idempotenceKey = paymentRow.id || crypto.randomUUID();
+
+    try {
+      const refund = await checkout.createRefund(refundPayload, idempotenceKey);
+      paymentRow.status = 'refunded';
+      paymentRow.refundId = (refund as any).id || null;
+      paymentRow.refundedAt = new Date();
+      paymentRow.refundError = null;
+      await this.aiPaymentRepository.save(paymentRow);
+
+      await this.aiSubscriptionService.markSubscriptionRefunded(plusSub.id);
+      const activeAfter =
+        await this.aiSubscriptionService.getActiveSubscription(user);
+
+      await ctx.reply(
+        '✅ Отмена оформлена, возврат отправлен в ЮKassa.\n\n' +
+          (activeAfter
+            ? `AI Plus останется активной до ${activeAfter.expiresAt.toLocaleDateString('ru-RU')}.\n`
+            : 'AI Plus отключена.\n') +
+          'Срок зачисления денег зависит от вашего банка.',
+      );
+    } catch (e: any) {
+      paymentRow.status = 'refund_failed';
+      paymentRow.refundError = e?.message || String(e);
+      await this.aiPaymentRepository.save(paymentRow);
+      this.logger.error('AI Plus refund failed', e);
+      await ctx.reply(
+        '❌ Не удалось оформить возврат. Попробуйте позже или напишите в поддержку.',
+      );
+    }
+  }
+
+  @Command('plus_cancel')
+  async onPlusCancel(@Ctx() ctx: Context) {
+    await this.onPlusManage(ctx);
   }
 
   @Command('mode')
@@ -348,14 +837,27 @@ export class TelegramBotService {
         Markup.button.callback('👁️ Vision', 'category:vision'),
         Markup.button.callback('🤖 Others', 'category:others'),
       ],
+      [Markup.button.callback('⬅️ Профиль', 'open_profile')],
     ]);
 
-    await ctx.reply(
+    const text =
       `🤖 <b>Выбор модели ИИ</b>\n\n` +
-        `Текущая модель: <code>${currentModel}</code>\n\n` +
-        `Выберите категорию:`,
-      { parse_mode: 'HTML', ...keyboard },
-    );
+      `Текущая модель: <code>${currentModel}</code>\n\n` +
+      `Выберите категорию:`;
+
+    const isCallback = !!ctx.callbackQuery;
+    try {
+      if (isCallback) {
+        await ctx.editMessageText(text, {
+          parse_mode: 'HTML',
+          ...keyboard,
+        } as any);
+      } else {
+        await ctx.reply(text, { parse_mode: 'HTML', ...keyboard });
+      }
+    } catch {
+      await ctx.reply(text, { parse_mode: 'HTML', ...keyboard });
+    }
   }
 
   @Action(/^category:(.+)$/)
@@ -411,7 +913,10 @@ export class TelegramBotService {
         `set_ai_model:${m.id}`,
       ),
     ]);
-    buttons.push([Markup.button.callback('⬅️ Назад', 'back_to_categories')]);
+    buttons.push([
+      Markup.button.callback('⬅️ Категории', 'back_to_categories'),
+      Markup.button.callback('⬅️ Профиль', 'open_profile'),
+    ]);
 
     await ctx.editMessageText(title, Markup.inlineKeyboard(buttons));
   }
@@ -430,6 +935,7 @@ export class TelegramBotService {
         Markup.button.callback('👁️ Vision', 'category:vision'),
         Markup.button.callback('🤖 Others', 'category:others'),
       ],
+      [Markup.button.callback('⬅️ Профиль', 'open_profile')],
     ]);
 
     await ctx.editMessageText(
@@ -940,15 +1446,16 @@ export class TelegramBotService {
       const mainButtons = [
         [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
         [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
+        [Markup.button.callback('👤 Профиль', 'open_profile')],
+        [
+          Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
+          Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
+        ],
         [
           Markup.button.callback(
             '⭐ Поддержать звездами',
             'open_support_stars:main',
           ),
-        ],
-        [
-          Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
-          Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
         ],
         [
           Markup.button.url(
@@ -1055,6 +1562,41 @@ export class TelegramBotService {
     const user = await this.userHelperService.getUser(ctx);
     await this.supportService.handleSuggestionCommand(ctx, user);
     await this.userRepository.save(user);
+  }
+
+  @Command('plus')
+  async onPlus(@Ctx() ctx: Context) {
+    const providerToken = this.configService.get<string>(
+      'YOOKASSA_PROVIDER_TOKEN',
+    );
+    if (!providerToken) {
+      await ctx.reply(
+        '⚠️ Платежи через ЮKassa пока не настроены. Напишите в поддержку.',
+      );
+      return;
+    }
+    const priceKops = this.configService.get<number>(
+      'AI_PLUS_PRICE_KOPS',
+      39900,
+    );
+    await ctx.replyWithInvoice({
+      title: 'AI Plus — подписка на 1 месяц',
+      description:
+        '• 200 запросов к ИИ в месяц вместо 50\n' +
+        '• Те же модели (Llama, Groq и др.)\n' +
+        '• Вторая покупка = продление срока подписки (лимит 200/мес не суммируется)\n' +
+        '• Оплата раз в месяц, отмена в любой момент',
+      payload: 'ai_plus_1m',
+      provider_token: providerToken,
+      currency: 'RUB',
+      prices: [{ label: 'Подписка AI Plus (1 месяц)', amount: priceKops }],
+    });
+  }
+
+  @Action('open_ai_plus')
+  async onOpenAiPlus(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    await this.onPlus(ctx);
   }
 
   @Command('support_stars')
@@ -1684,13 +2226,63 @@ export class TelegramBotService {
   async onSuccessfulPayment(@Ctx() ctx: Context) {
     const message = ctx.message as any;
     const payment = message.successful_payment;
+    const payload = payment.invoice_payload || '';
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
 
-    await ctx.reply(
-      'Спасибо за вашу поддержку! 🌟\nВаш вклад поможет сделать бота еще лучше.',
-    );
+    const user = await this.userRepository.findOne({
+      where: { chatId: String(chatId) },
+    });
+
+    if (payload === 'ai_plus_1m' && user) {
+      const result = await this.aiSubscriptionService.activatePlus(
+        user,
+        payment.provider_payment_charge_id,
+      );
+      const { subscription, wasExtended, previousExpiresAt } = result;
+
+      const usageAtPurchase = await this.aiLimitService.getUsageSnapshot(user);
+      const paymentRow = this.aiPaymentRepository.create({
+        user,
+        payload,
+        amountKops: payment.total_amount,
+        currency: payment.currency,
+        telegramPaymentChargeId: payment.telegram_payment_charge_id || null,
+        providerPaymentChargeId: payment.provider_payment_charge_id || null,
+        subscriptionId: subscription.id,
+        usageMonthlyCountAtPurchase: usageAtPurchase.monthlyCount,
+        usageWeeklyCountAtPurchase: usageAtPurchase.weeklyCount,
+        status: 'succeeded',
+      });
+      await this.aiPaymentRepository.save(paymentRow);
+
+      const line1 = wasExtended
+        ? `✅ Подписка <b>AI Plus</b> продлена.`
+        : `✅ Подписка <b>AI Plus</b> активирована.`;
+      const datesLine =
+        wasExtended && previousExpiresAt
+          ? `Было до: ${previousExpiresAt.toLocaleDateString('ru-RU')}\nСтало до: ${subscription.expiresAt.toLocaleDateString('ru-RU')}`
+          : `Действует до: ${subscription.expiresAt.toLocaleDateString('ru-RU')}`;
+      await ctx.reply(
+        `${line1}\n${datesLine}\n\n` +
+          `Лимит: <b>200 запросов/месяц</b> (не суммируется при повторной покупке).\n` +
+          `Команда /profile покажет, сколько осталось в этом месяце.`,
+        { parse_mode: 'HTML' },
+      );
+      this.logger.log(
+        `AI Plus activated for user ${user.chatId}, expires ${subscription.expiresAt.toISOString()}, charge_id ${payment.provider_payment_charge_id}`,
+      );
+      return;
+    }
+
+    if (payload === 'support_stars') {
+      await ctx.reply(
+        'Спасибо за вашу поддержку! 🌟\nВаш вклад поможет сделать бота еще лучше.',
+      );
+    }
 
     this.logger.log(
-      `Payment received: ${payment.total_amount / 100} ${payment.currency} from ${ctx.chat.id}`,
+      `Payment received: ${payment.total_amount / 100} ${payment.currency} from ${chatId}, payload=${payload}`,
     );
   }
 

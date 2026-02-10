@@ -20,6 +20,13 @@ export class GroqService implements OnModuleInit {
 
   async onModuleInit() {
     await this.syncKeysFromEnv();
+    try {
+      await this.checkAllKeysHealth();
+    } catch (e: any) {
+      this.logger.warn(
+        `Groq keys health-check on startup failed: ${e?.message || e}`,
+      );
+    }
   }
 
   private async syncKeysFromEnv() {
@@ -109,6 +116,76 @@ export class GroqService implements OnModuleInit {
         }
       }
       throw error;
+    }
+  }
+
+  private async checkSingleKey(
+    aiKey: AiKey,
+    model: string = 'llama-3.3-70b-versatile',
+  ): Promise<{
+    ok: boolean;
+    status?: number;
+    error?: string;
+  }> {
+    try {
+      const response = await axios.post(
+        this.API_URL,
+        {
+          model,
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${aiKey.key}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      await this.updateKeyLimits(aiKey, response.headers, response.data.usage);
+      return { ok: true, status: response.status };
+    } catch (error: any) {
+      if (error.response) {
+        await this.updateKeyLimits(aiKey, error.response.headers);
+        const status = error.response.status;
+        const data = error.response.data;
+
+        const code = data?.error?.code;
+        if (
+          status === 401 ||
+          status === 403 ||
+          (status === 400 && code === 'organization_restricted')
+        ) {
+          aiKey.isActive = false;
+          await this.aiKeyRepository.save(aiKey);
+          this.logger.warn(
+            `Deactivated Groq key due to auth error: ${aiKey.key.substring(
+              0,
+              10,
+            )}...`,
+          );
+        }
+
+        this.logger.error(
+          `Groq health-check error (${model}): ${status} - ${JSON.stringify(
+            data,
+          )}`,
+        );
+        return {
+          ok: false,
+          status,
+          error: typeof data === 'string' ? data : JSON.stringify(data),
+        };
+      }
+
+      this.logger.error(
+        `Groq health-check network error: ${error?.message || error}`,
+      );
+      return {
+        ok: false,
+        error: error?.message || String(error),
+      };
     }
   }
 
@@ -268,5 +345,34 @@ export class GroqService implements OnModuleInit {
     }
 
     return stats;
+  }
+
+  async checkAllKeysHealth() {
+    const keys = await this.aiKeyRepository.find();
+    const results = [];
+
+    for (const key of keys) {
+      if (!key.isActive) {
+        results.push({
+          keyPrefix: key.key.substring(0, 10),
+          isActive: false,
+          ok: false,
+          status: undefined,
+          error: 'deactivated',
+        });
+        continue;
+      }
+
+      const res = await this.checkSingleKey(key);
+      results.push({
+        keyPrefix: key.key.substring(0, 10),
+        isActive: key.isActive,
+        ok: res.ok,
+        status: res.status,
+        error: res.error,
+      });
+    }
+
+    return results;
   }
 }

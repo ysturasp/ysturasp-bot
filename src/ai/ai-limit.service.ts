@@ -3,16 +3,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../database/entities/user.entity';
 import { UserAiUsage } from '../database/entities/user-ai-usage.entity';
+import { AiSubscriptionService } from './ai-subscription.service';
 
 @Injectable()
 export class AiLimitService {
-  private readonly FREE_MONTHLY_LIMIT = 50;
-
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserAiUsage)
     private readonly usageRepository: Repository<UserAiUsage>,
+    private readonly aiSubscriptionService: AiSubscriptionService,
   ) {}
 
   private async getOrCreateUsage(user: User): Promise<UserAiUsage> {
@@ -36,6 +36,14 @@ export class AiLimitService {
     return usage;
   }
 
+  async getUsageSnapshot(user: User): Promise<{
+    monthlyCount: number;
+    weeklyCount: number;
+  }> {
+    const usage = await this.getOrCreateUsage(user);
+    return { monthlyCount: usage.monthlyCount, weeklyCount: usage.weeklyCount };
+  }
+
   async checkAndResetLimits(user: User): Promise<void> {
     const now = new Date();
     const usage = await this.getOrCreateUsage(user);
@@ -43,10 +51,8 @@ export class AiLimitService {
     let updated = false;
 
     const lastResetMonthly = usage.lastResetMonthly || now;
-    if (
-      now.getMonth() !== lastResetMonthly.getMonth() ||
-      now.getFullYear() !== lastResetMonthly.getFullYear()
-    ) {
+    const msPerMonth = 30 * 24 * 60 * 60 * 1000;
+    if (now.getTime() - lastResetMonthly.getTime() > msPerMonth) {
       usage.monthlyCount = 0;
       usage.lastResetMonthly = now;
       updated = true;
@@ -65,11 +71,16 @@ export class AiLimitService {
     }
   }
 
+  async getMonthlyLimit(user: User): Promise<number> {
+    return this.aiSubscriptionService.getMonthlyLimit(user);
+  }
+
   async canRequest(user: User): Promise<boolean> {
     if (user.isAdmin) return true;
     await this.checkAndResetLimits(user);
     const usage = await this.getOrCreateUsage(user);
-    return usage.monthlyCount < this.FREE_MONTHLY_LIMIT;
+    const limit = await this.getMonthlyLimit(user);
+    return usage.monthlyCount < limit;
   }
 
   async incrementUsage(user: User): Promise<void> {
@@ -81,15 +92,16 @@ export class AiLimitService {
 
   async getRemainingRequests(user: User): Promise<number> {
     const usage = await this.getOrCreateUsage(user);
-    return Math.max(0, this.FREE_MONTHLY_LIMIT - usage.monthlyCount);
+    const limit = await this.getMonthlyLimit(user);
+    return Math.max(0, limit - usage.monthlyCount);
   }
 
   async getNextResetDate(user: User): Promise<Date> {
     const usage = await this.getOrCreateUsage(user);
-    const nextMonth = new Date(usage.lastResetMonthly || new Date());
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
-    nextMonth.setDate(1);
-    nextMonth.setHours(0, 0, 0, 0);
-    return nextMonth;
+    const base = usage.lastResetMonthly || new Date();
+    const msPerMonth = 30 * 24 * 60 * 60 * 1000;
+    const next = new Date(base.getTime() + msPerMonth);
+    next.setHours(0, 0, 0, 0);
+    return next;
   }
 }

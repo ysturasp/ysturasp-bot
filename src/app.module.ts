@@ -19,6 +19,8 @@ import { BotEvent } from './database/entities/bot-event.entity';
 import { AiKey } from './database/entities/ai-key.entity';
 import { UserAiUsage } from './database/entities/user-ai-usage.entity';
 import { UserAiContext } from './database/entities/user-ai-context.entity';
+import { UserAiSubscription } from './database/entities/user-ai-subscription.entity';
+import { UserAiPayment } from './database/entities/user-ai-payment.entity';
 import { ScheduleModule } from './schedule/schedule.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
@@ -70,6 +72,8 @@ import { AiModule } from './ai/ai.module';
           AiKey,
           UserAiUsage,
           UserAiContext,
+          UserAiSubscription,
+          UserAiPayment,
         ],
         synchronize: true,
       }),

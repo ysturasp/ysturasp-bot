@@ -411,8 +411,12 @@ export class TextHandlerService {
   ): Promise<boolean> {
     const canRequest = await this.aiLimitService.canRequest(user);
     if (!canRequest) {
+      const limit = await this.aiLimitService.getMonthlyLimit(user);
+      const resetDate = await this.aiLimitService.getNextResetDate(user);
       await ctx.reply(
-        '⚠️ Вы исчерпали лимит бесплатных запросов к ИИ на этот месяц (50/50).\n\nЛимиты обновятся в начале следующего месяца.',
+        `⚠️ Вы исчерпали лимит запросов к ИИ (${limit}/${limit}).\n\nНовый лимит будет доступен примерно с <b>${resetDate.toLocaleDateString(
+          'ru-RU',
+        )}</b>. Подписка /plus — 200 запросов в месяц.`,
       );
       return true;
     }

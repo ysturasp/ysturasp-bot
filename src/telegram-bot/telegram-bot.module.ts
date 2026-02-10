@@ -28,6 +28,7 @@ import { AnalyticsMiddleware } from './middleware/analytics.middleware';
 import { AnalyticsLauncherService } from './middleware/analytics-launcher.service';
 import { AiModule } from '../ai/ai.module';
 import { UserAiContext } from '../database/entities/user-ai-context.entity';
+import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { UserAiContext } from '../database/entities/user-ai-context.entity';
       SupportRequest,
       Referral,
       UserAiContext,
+      UserAiPayment,
     ]),
     ScheduleModule,
     HttpModule,
