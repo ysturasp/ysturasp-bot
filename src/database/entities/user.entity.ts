@@ -49,4 +49,7 @@ export class User {
 
   @Column({ name: 'ystu_data', type: 'jsonb', nullable: true })
   ystuData: Record<string, any> | null;
+
+  @Column({ default: 'llama-3.3-70b-versatile' })
+  aiModel: string;
 }

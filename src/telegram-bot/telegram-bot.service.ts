@@ -20,6 +20,9 @@ import { YearEndBroadcastService } from './services/year-end-broadcast.service';
 import { ReferralService } from './services/referral.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { getFooterLinks } from '../config/links.config';
+import { GroqService } from '../ai/groq.service';
+import { AiLimitService } from '../ai/ai-limit.service';
+import { UserAiContext } from '../database/entities/user-ai-context.entity';
 
 @Update()
 @Injectable()
@@ -45,6 +48,10 @@ export class TelegramBotService {
     private readonly yearEndBroadcastService: YearEndBroadcastService,
     private readonly referralService: ReferralService,
     private readonly analyticsService: AnalyticsService,
+    private readonly groqService: GroqService,
+    private readonly aiLimitService: AiLimitService,
+    @InjectRepository(UserAiContext)
+    private readonly aiContextRepository: Repository<UserAiContext>,
   ) {}
 
   private async getUserInfoForAdmin(user: User): Promise<string> {
@@ -276,6 +283,178 @@ export class TelegramBotService {
       ...getMainKeyboard(),
       ...Markup.inlineKeyboard(mainButtons),
     });
+  }
+
+  @Command('reset')
+  async onReset(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await this.aiContextRepository.delete({ user: { id: user.id } as any });
+    await ctx.reply('🧹 Контекст общения с ИИ очищен.');
+  }
+
+  @Command('ai_stats')
+  async onAiStats(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) return;
+
+    const stats = await this.groqService.getPoolStats();
+
+    const message =
+      `📊 <b>Статистика ИИ:</b>\n\n` +
+      `🔑 Ключей всего: <b>${stats.totalKeys}</b>\n` +
+      `✅ Активных: <b>${stats.activeKeys}</b>\n` +
+      `🚫 Лимиты исчерпаны: <b>${stats.limitedKeys}</b>\n\n` +
+      `✨ Использовано токенов: <b>${stats.totalTokens.toLocaleString('ru-RU')}</b>\n` +
+      `💬 Всего запросов к ИИ: <b>${stats.totalRequests}</b>\n\n` +
+      (stats.soonestReset
+        ? `⏳ Ближайший сброс лимитов: <b>${stats.soonestReset.toLocaleTimeString('ru-RU')}</b>`
+        : `🚀 Все ключи готовы к работе!`);
+
+    await this.replyWithFooter(ctx, message);
+  }
+
+  @Command('profile')
+  async onProfile(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    await this.aiLimitService.checkAndResetLimits(user);
+
+    const remaining = await this.aiLimitService.getRemainingRequests(user);
+    const resetDate = await this.aiLimitService.getNextResetDate(user);
+    const model = user.aiModel || 'llama-3.3-70b-versatile';
+
+    const message =
+      `👤 <b>Ваш профиль:</b>\n` +
+      `🆔 ID: <code>${user.chatId}</code>\n` +
+      `💳 Подписка: <b>Free</b>\n\n` +
+      `🤖 Текущая модель: <code>${model}</code>\n` +
+      `⏳ Осталось запросов: <b>${remaining}/50</b>\n` +
+      `📅 Сброс лимитов: <b>${resetDate.toLocaleDateString('ru-RU')}</b>\n\n` +
+      `Используйте /mode для смены модели или /reset для очистки контекста.`;
+
+    await this.replyWithFooter(ctx, message);
+  }
+
+  @Command('mode')
+  async onMode(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    const currentModel = user.aiModel || 'llama-3.3-70b-versatile';
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🧠 Reasoning', 'category:reasoning'),
+        Markup.button.callback('⚡ Multi-purpose', 'category:multipurpose'),
+      ],
+      [
+        Markup.button.callback('👁️ Vision', 'category:vision'),
+        Markup.button.callback('🤖 Others', 'category:others'),
+      ],
+    ]);
+
+    await ctx.reply(
+      `🤖 <b>Выбор модели ИИ</b>\n\n` +
+        `Текущая модель: <code>${currentModel}</code>\n\n` +
+        `Выберите категорию:`,
+      { parse_mode: 'HTML', ...keyboard },
+    );
+  }
+
+  @Action(/^category:(.+)$/)
+  async onCategorySelect(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const category = ctx.match[1];
+    const user = await this.userHelperService.getUser(ctx);
+    const currentModel = user.aiModel || 'llama-3.3-70b-versatile';
+
+    let models = [];
+    let title = '';
+
+    if (category === 'reasoning') {
+      title = '🧠 Модели для рассуждений (Reasoning):';
+      models = [
+        { name: 'GPT OSS 120B', id: 'openai/gpt-oss-120b' },
+        { name: 'GPT OSS 20B', id: 'openai/gpt-oss-20b' },
+        { name: 'Qwen 3 32B', id: 'qwen/qwen3-32b' },
+      ];
+    } else if (category === 'multipurpose') {
+      title = '⚡ Универсальные модели:';
+      models = [
+        {
+          name: 'Llama 4 Scout',
+          id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        },
+        { name: 'Kimi K2', id: 'moonshotai/kimi-k2-instruct' },
+        { name: 'Llama 3.3 70B', id: 'llama-3.3-70b-versatile' },
+      ];
+    } else if (category === 'vision') {
+      title = '👁️ Модели со зрением (Vision):';
+      models = [
+        {
+          name: 'Llama 4 Maverick',
+          id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+        },
+        {
+          name: 'Llama 4 Scout',
+          id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        },
+      ];
+    } else {
+      title = '🤖 Другие модели:';
+      models = [
+        { name: 'Llama 3.1 8B', id: 'llama-3.1-8b-instant' },
+        { name: 'Llama Guard 4', id: 'meta-llama/llama-guard-4-12b' },
+      ];
+    }
+
+    const buttons = models.map((m) => [
+      Markup.button.callback(
+        `${m.name} ${currentModel === m.id ? '✅' : ''}`,
+        `set_ai_model:${m.id}`,
+      ),
+    ]);
+    buttons.push([Markup.button.callback('⬅️ Назад', 'back_to_categories')]);
+
+    await ctx.editMessageText(title, Markup.inlineKeyboard(buttons));
+  }
+
+  @Action('back_to_categories')
+  async onBackToCategories(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    const currentModel = user.aiModel || 'llama-3.3-70b-versatile';
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🧠 Reasoning', 'category:reasoning'),
+        Markup.button.callback('⚡ Multi-purpose', 'category:multipurpose'),
+      ],
+      [
+        Markup.button.callback('👁️ Vision', 'category:vision'),
+        Markup.button.callback('🤖 Others', 'category:others'),
+      ],
+    ]);
+
+    await ctx.editMessageText(
+      `🤖 <b>Выбор модели ИИ</b>\n\n` +
+        `Текущая модель: <code>${currentModel}</code>\n\n` +
+        `Выберите категорию:`,
+      { parse_mode: 'HTML', ...keyboard },
+    );
+  }
+
+  @Action(/^set_ai_model:(.+)$/)
+  async onSetAiModel(@Ctx() ctx: Context) {
+    // @ts-ignore
+    const model = ctx.match[1];
+    const user = await this.userHelperService.getUser(ctx);
+    user.aiModel = model;
+    await this.userRepository.save(user);
+
+    await ctx.answerCbQuery(`Выбрана модель: ${model}`);
+    await ctx.editMessageText(
+      `✅ Модель ИИ изменена на: <code>${model}</code>`,
+      {
+        parse_mode: 'HTML',
+      },
+    );
   }
 
   @Command('subscribe')
@@ -1403,10 +1582,25 @@ export class TelegramBotService {
       return;
     }
 
+    if (!user.state && ctx.chat?.type === 'private') {
+      await this.textHandlerService.handlePhoto(ctx, user);
+      return;
+    }
+
     if (!user.state && !user.isAdmin) {
       await ctx.reply(
         'Фотография получена, но не указана тема. Используйте /support или /suggestion',
       );
+    }
+  }
+
+  @On('voice')
+  async onVoice(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user) return;
+
+    if (!user.state && ctx.chat?.type === 'private') {
+      await this.textHandlerService.handleVoice(ctx, user);
     }
   }
 

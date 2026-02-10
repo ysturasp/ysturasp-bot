@@ -26,6 +26,8 @@ import { StatisticsService } from './services/statistics.service';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AnalyticsMiddleware } from './middleware/analytics.middleware';
 import { AnalyticsLauncherService } from './middleware/analytics-launcher.service';
+import { AiModule } from '../ai/ai.module';
+import { UserAiContext } from '../database/entities/user-ai-context.entity';
 
 @Module({
   imports: [
@@ -38,9 +40,11 @@ import { AnalyticsLauncherService } from './middleware/analytics-launcher.servic
       PollAnswer,
       SupportRequest,
       Referral,
+      UserAiContext,
     ]),
     ScheduleModule,
     HttpModule,
+    AiModule,
   ],
   controllers: [TelegramWebappController],
   providers: [

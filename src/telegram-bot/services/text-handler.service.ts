@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import axios from 'axios';
 import { Context, Markup } from 'telegraf';
 import { User } from '../../database/entities/user.entity';
 import { ScheduleService } from '../../schedule/schedule.service';
@@ -6,6 +7,8 @@ import { SupportService } from './support.service';
 import { PollService } from './poll.service';
 import { SubscriptionService } from './subscription.service';
 import { ScheduleCommandService } from './schedule-command.service';
+import { GroqService } from '../../ai/groq.service';
+import { AiLimitService } from '../../ai/ai-limit.service';
 import {
   findCanonicalGroupName,
   normalizeAudienceName,
@@ -13,6 +16,7 @@ import {
 import { getMainKeyboard } from '../helpers/keyboard.helper';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { UserAiContext } from '../../database/entities/user-ai-context.entity';
 import {
   parseRussianDate,
   parseRussianDayOfWeek,
@@ -23,15 +27,24 @@ import {
 @Injectable()
 export class TextHandlerService {
   private readonly logger = new Logger(TextHandlerService.name);
+  private readonly AI_SYSTEM_PROMPT =
+    'Отвечай на русском языке. Отвечай максимально кратко и по делу, ' +
+    'желательно не больше 2000–2500 символов. Не используй таблицы markdown, ' +
+    'заголовки с # и сложное форматирование. Структурируй ответ обычными абзацами ' +
+    'и простыми списками, без лишних вступлений и заключений.';
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(UserAiContext)
+    private readonly aiContextRepository: Repository<UserAiContext>,
     private readonly scheduleService: ScheduleService,
     private readonly supportService: SupportService,
     private readonly pollService: PollService,
     private readonly subscriptionService: SubscriptionService,
     private readonly scheduleCommandService: ScheduleCommandService,
+    private readonly groqService: GroqService,
+    private readonly aiLimitService: AiLimitService,
   ) {}
 
   async handleText(ctx: Context, user: User, text: string): Promise<boolean> {
@@ -306,7 +319,296 @@ export class TextHandlerService {
       return true;
     }
 
-    return await this.tryHandleSearch(ctx, user, text);
+    const searchHandled = await this.tryHandleSearch(ctx, user, text);
+    if (searchHandled) return true;
+
+    if (chatType === 'private') {
+      return await this.handleAiFallback(ctx, user, text);
+    }
+
+    return false;
+  }
+
+  async handleVoice(ctx: Context, user: User): Promise<void> {
+    const message = ctx.message as any;
+    const voice = message.voice;
+
+    try {
+      await ctx.sendChatAction('typing');
+      const fileLink = await ctx.telegram.getFileLink(voice.file_id);
+      const response = await axios.get(fileLink.toString(), {
+        responseType: 'arraybuffer',
+      });
+      const buffer = Buffer.from(response.data);
+
+      const transcription = await this.groqService.transcribe(
+        buffer,
+        `voice_${voice.file_id}.ogg`,
+      );
+
+      await ctx.reply(
+        `🎤 <b>Распознанный текст:</b>\n<i>${transcription}</i>`,
+        { parse_mode: 'HTML' },
+      );
+
+      await this.handleAiFallback(ctx, user, transcription);
+    } catch (error) {
+      this.logger.error(`Voice processing error: ${error.message}`);
+      await ctx.reply('❌ Не удалось распознать голосовое сообщение.');
+    }
+  }
+
+  async handlePhoto(ctx: Context, user: User): Promise<void> {
+    const message = ctx.message as any;
+    const photo = message.photo[message.photo.length - 1];
+    const caption = message.caption || 'Что на этом изображении?';
+
+    const canRequest = await this.aiLimitService.canRequest(user);
+    if (!canRequest) {
+      await ctx.reply('⚠️ Вы исчерпали лимит запросов к ИИ.');
+      return;
+    }
+
+    try {
+      await ctx.sendChatAction('typing');
+      const fileLink = await ctx.telegram.getFileLink(photo.file_id);
+
+      const res = await axios.get(fileLink.toString(), {
+        responseType: 'arraybuffer',
+      });
+      const base64Image = Buffer.from(res.data).toString('base64');
+      const dataUrl = `data:image/jpeg;base64,${base64Image}`;
+
+      const response = await this.groqService.chatCompletion(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: caption },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ] as any,
+          },
+        ],
+        user.aiModel.includes('maverick') || user.aiModel.includes('scout')
+          ? user.aiModel
+          : 'meta-llama/llama-4-maverick-17b-128e-instruct',
+      );
+
+      await this.aiLimitService.incrementUsage(user);
+      await this.userRepository.save(user);
+
+      await this.sendSmartReply(ctx, response);
+    } catch (error) {
+      this.logger.error(`Photo processing error: ${error.message}`);
+      await ctx.reply('❌ Не удалось обработать изображение.');
+    }
+  }
+
+  private async handleAiFallback(
+    ctx: Context,
+    user: User,
+    text: string,
+  ): Promise<boolean> {
+    const canRequest = await this.aiLimitService.canRequest(user);
+    if (!canRequest) {
+      await ctx.reply(
+        '⚠️ Вы исчерпали лимит бесплатных запросов к ИИ на этот месяц (50/50).\n\nЛимиты обновятся в начале следующего месяца.',
+      );
+      return true;
+    }
+
+    try {
+      await ctx.sendChatAction('typing');
+
+      const previousMessages =
+        (await this.aiContextRepository.find({
+          where: { user: { id: user.id } },
+          order: { createdAt: 'ASC' },
+          take: 16,
+          relations: ['user'],
+        })) || [];
+
+      const userMessage = this.aiContextRepository.create({
+        user,
+        role: 'user',
+        content: text,
+      });
+      await this.aiContextRepository.save(userMessage);
+
+      const history = [...previousMessages, userMessage];
+
+      const limitedContext = history.slice(-8);
+
+      const systemMessage = {
+        role: 'system',
+        content: this.AI_SYSTEM_PROMPT,
+      };
+
+      const response = await this.groqService.chatCompletion(
+        [systemMessage, ...limitedContext].map((c) => ({
+          role: c.role,
+          content: c.content,
+        })) as any,
+        user.aiModel,
+      );
+
+      await this.aiLimitService.incrementUsage(user);
+
+      const assistantMessage = this.aiContextRepository.create({
+        user,
+        role: 'assistant',
+        content: response,
+      });
+      await this.aiContextRepository.save(assistantMessage);
+
+      await this.sendSmartReply(ctx, response);
+      return true;
+    } catch (error) {
+      this.logger.error(`AI Fallback error: ${error.message}`);
+      await ctx.reply(
+        '❌ К сожалению, произошла ошибка при обращении к ИИ. Попробуйте позже или используйте /reset.',
+      );
+      return true;
+    }
+  }
+
+  private async sendSmartReply(ctx: Context, text: string): Promise<void> {
+    const CHUNK_SIZE = 3800;
+
+    text = this.preprocessMarkdownForTelegram(text);
+
+    const chunks: string[] = [];
+    let currentChunk = '';
+    const paragraphs = text.split('\n');
+
+    for (const paragraph of paragraphs) {
+      if (currentChunk.length + paragraph.length + 1 > CHUNK_SIZE) {
+        if (currentChunk) chunks.push(currentChunk);
+        currentChunk = paragraph;
+      } else {
+        currentChunk = currentChunk
+          ? `${currentChunk}\n${paragraph}`
+          : paragraph;
+      }
+    }
+    if (currentChunk) chunks.push(currentChunk);
+
+    for (const chunk of chunks) {
+      try {
+        const html = this.mdToHtml(chunk);
+        await ctx.reply(html, {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `HTML parsing failed, falling back to plain text for chunk: ${error.message}`,
+        );
+        await ctx.reply(chunk);
+      }
+    }
+  }
+
+  private preprocessMarkdownForTelegram(md: string): string {
+    const lines = md.split('\n');
+    const result: string[] = [];
+
+    const isSeparatorRow = (line: string): boolean =>
+      /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+
+    const splitTableRow = (line: string): string[] => {
+      const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+      return trimmed.split('|').map((cell) => cell.trim());
+    };
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+
+      if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(line)) {
+        if (result.length && result[result.length - 1].trim() !== '') {
+          result.push('');
+        }
+        i++;
+        continue;
+      }
+
+      const next = i + 1 < lines.length ? lines[i + 1] : null;
+      if (line.includes('|') && next && isSeparatorRow(next)) {
+        i += 2;
+
+        while (i < lines.length && lines[i].includes('|')) {
+          const rowLine = lines[i];
+          const cells = splitTableRow(rowLine);
+
+          if (cells.length >= 2) {
+            const title = cells[0];
+            const value = cells.slice(1).join(' | ');
+            result.push(`- **${title}**: ${value}`);
+          } else if (cells.length === 1) {
+            result.push(`- ${cells[0]}`);
+          }
+
+          i++;
+        }
+
+        result.push('');
+        continue;
+      }
+
+      const headingMatch = line.match(/^\s{0,3}#{1,6}\s+(.+)$/);
+      if (headingMatch) {
+        const title = headingMatch[1].trim();
+        if (result.length > 0 && result[result.length - 1].trim() !== '') {
+          result.push('');
+        }
+        result.push(`**${title}**`);
+        result.push('');
+        i++;
+        continue;
+      }
+
+      let processed = line;
+
+      if (/^\s*>\s+/.test(processed)) {
+        processed = processed.replace(/^\s*>\s+/, '');
+      }
+
+      const checkboxMatch = processed.match(/^\s*[-*]\s+\[(?: |x|X)\]\s*(.+)$/);
+      if (checkboxMatch) {
+        processed = `• ${checkboxMatch[1]}`;
+      } else {
+        const listMatch = processed.match(/^\s*[-*]\s+(.+)$/);
+        if (listMatch) {
+          processed = `• ${listMatch[1]}`;
+
+          processed = processed.replace(/^• \*+(\S.*)$/, '• $1');
+        }
+      }
+
+      result.push(processed);
+      i++;
+    }
+
+    let output = result.join('\n');
+
+    output = output.replace(/\s\|\s+/g, '\n• ');
+
+    return output;
+  }
+
+  private mdToHtml(md: string): string {
+    return md
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/__([^_]+)__/g, '<b>$1</b>')
+      .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+      .replace(/\*/g, '');
   }
 
   private async tryHandleSearch(

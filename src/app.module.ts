@@ -16,12 +16,16 @@ import { Exam } from './database/entities/exam.entity';
 import { UserSession } from './database/entities/user-session.entity';
 import { Referral } from './database/entities/referral.entity';
 import { BotEvent } from './database/entities/bot-event.entity';
+import { AiKey } from './database/entities/ai-key.entity';
+import { UserAiUsage } from './database/entities/user-ai-usage.entity';
+import { UserAiContext } from './database/entities/user-ai-context.entity';
 import { ScheduleModule } from './schedule/schedule.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { TelegramBotModule } from './telegram-bot/telegram-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RedisModule } from './redis/redis.module';
 import { LoggerModule } from './logger/logger.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -63,6 +67,9 @@ import { LoggerModule } from './logger/logger.module';
           UserSession,
           Referral,
           BotEvent,
+          AiKey,
+          UserAiUsage,
+          UserAiContext,
         ],
         synchronize: true,
       }),
@@ -81,6 +88,7 @@ import { LoggerModule } from './logger/logger.module';
     NotificationsModule,
     RedisModule,
     LoggerModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
