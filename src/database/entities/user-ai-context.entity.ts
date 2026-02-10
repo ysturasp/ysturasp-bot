@@ -26,4 +26,3 @@ export class UserAiContext {
   @CreateDateColumn()
   createdAt: Date;
 }
-

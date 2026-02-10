@@ -36,4 +36,3 @@ export class UserAiUsage {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-

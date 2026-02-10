@@ -598,17 +598,39 @@ export class TextHandlerService {
   }
 
   private mdToHtml(md: string): string {
-    return md
+    const codeBlocks: string[] = [];
+    const placeholder = '\u0001PRE\u0002';
+    let text = md;
+
+    text = text.replace(/```([\s\S]*?)```/g, (_, block) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(block);
+      return placeholder + idx + placeholder;
+    });
+
+    text = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
       .replace(/__([^_]+)__/g, '<b>$1</b>')
-      .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
       .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
       .replace(/\*/g, '');
+
+    codeBlocks.forEach((block, idx) => {
+      const safe = block
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      text = text.replace(
+        placeholder + idx + placeholder,
+        '<pre>' + safe + '</pre>',
+      );
+    });
+
+    return text;
   }
 
   private async tryHandleSearch(
