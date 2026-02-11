@@ -2,7 +2,6 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, MoreThan, IsNull } from 'typeorm';
 import { AiKey } from '../database/entities/ai-key.entity';
-import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as FormData from 'form-data';
 
@@ -15,13 +14,14 @@ export class GroqService implements OnModuleInit {
   constructor(
     @InjectRepository(AiKey)
     private readonly aiKeyRepository: Repository<AiKey>,
-    private readonly configService: ConfigService,
   ) {}
 
   async onModuleInit() {
-    await this.syncKeysFromEnv();
     try {
-      await this.checkAllKeysHealth();
+      const keys = await this.aiKeyRepository.find();
+      if (keys.length > 0) {
+        await this.checkAllKeysHealth();
+      }
     } catch (e: any) {
       this.logger.warn(
         `Groq keys health-check on startup failed: ${e?.message || e}`,
@@ -29,51 +29,52 @@ export class GroqService implements OnModuleInit {
     }
   }
 
-  private async syncKeysFromEnv() {
-    let keysStr = this.configService.get<string>('GROQ_API_KEYS', '');
-    if (!keysStr) return;
-
-    keysStr = keysStr.replace(/[\[\]'"]/g, '');
-
-    const keys = keysStr
+  /**
+   * Добавляет ключи в БД. Вход: строка с ключами через запятую или перенос строки.
+   * Дубликаты пропускаются. Возвращает счётчики и список ошибок.
+   */
+  async addKeys(rawInput: string): Promise<{
+    added: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    const normalized = rawInput
+      .replace(/[\r\n]+/g, ',')
       .split(',')
       .map((k) => k.trim())
       .filter((k) => k.length > 0);
-    this.logger.log(`Syncing ${keys.length} Groq API keys from environment...`);
+    const unique = [...new Set(normalized)];
 
-    const existingKeys = await this.aiKeyRepository.find();
-    const existingKeyStrings = new Set(existingKeys.map((k) => k.key));
+    const existing = await this.aiKeyRepository.find();
+    const existingSet = new Set(existing.map((k) => k.key));
 
-    for (const key of keys) {
-      if (!existingKeyStrings.has(key)) {
-        const newKey = this.aiKeyRepository.create({
+    let added = 0;
+    const errors: string[] = [];
+
+    for (const key of unique) {
+      if (existingSet.has(key)) {
+        continue;
+      }
+      try {
+        const entity = this.aiKeyRepository.create({
           key,
           provider: 'groq',
           isActive: true,
           remainingRequests: 30,
           remainingTokens: 6000,
         });
-        await this.aiKeyRepository.save(newKey);
-        this.logger.log(`Added new Groq API key: ${key.substring(0, 10)}...`);
+        await this.aiKeyRepository.save(entity);
+        existingSet.add(key);
+        added++;
+        this.logger.log(`Added Groq API key: ${key.substring(0, 10)}...`);
+      } catch (e: any) {
+        const msg = e?.message || String(e);
+        errors.push(`${key.substring(0, 10)}...: ${msg}`);
       }
     }
 
-    const envKeySet = new Set(keys);
-    for (const existingKey of existingKeys) {
-      if (!envKeySet.has(existingKey.key) && existingKey.isActive) {
-        existingKey.isActive = false;
-        await this.aiKeyRepository.save(existingKey);
-        this.logger.log(
-          `Deactivated Groq API key (not in env): ${existingKey.key.substring(0, 10)}...`,
-        );
-      } else if (envKeySet.has(existingKey.key) && !existingKey.isActive) {
-        existingKey.isActive = true;
-        await this.aiKeyRepository.save(existingKey);
-        this.logger.log(
-          `Re-activated Groq API key: ${existingKey.key.substring(0, 10)}...`,
-        );
-      }
-    }
+    const skipped = unique.length - added - errors.length;
+    return { added, skipped, errors };
   }
 
   async chatCompletion(

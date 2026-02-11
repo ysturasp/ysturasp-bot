@@ -345,9 +345,38 @@ export class TelegramBotService {
 
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('🔍 Проверить ключи', 'ai_check_keys')],
+      [Markup.button.callback('➕ Добавить ключ(и)', 'ai_add_keys')],
     ]);
 
     await this.replyWithFooter(ctx, message, keyboard as any);
+  }
+
+  @Command('ai_add_key')
+  async onAiAddKeyCommand(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('Доступно только администраторам');
+      return;
+    }
+    user.state = 'WAITING_AI_KEYS';
+    user.stateData = null;
+    await this.userRepository.save(user);
+    await ctx.reply(
+      'Отправьте один или несколько ключей Groq (каждый с новой строки или через запятую).\nДля отмены: /cancel',
+    );
+  }
+
+  @Action('ai_add_keys')
+  async onAiAddKeysAction(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) return;
+    user.state = 'WAITING_AI_KEYS';
+    user.stateData = null;
+    await this.userRepository.save(user);
+    await ctx.reply(
+      'Отправьте один или несколько ключей Groq (каждый с новой строки или через запятую).\nДля отмены: /cancel',
+    );
   }
 
   @Command('ai_check_keys')
@@ -1962,6 +1991,29 @@ export class TelegramBotService {
     // @ts-ignore
     const text = ctx.message.text;
     const user = await this.userHelperService.getUser(ctx);
+
+    if (user?.state === 'WAITING_AI_KEYS' && user.isAdmin) {
+      const trimmed = text.trim();
+      if (trimmed.toLowerCase() === '/cancel') {
+        user.state = null;
+        user.stateData = null;
+        await this.userRepository.save(user);
+        await ctx.reply('✅ Добавление ключей отменено.');
+        return;
+      }
+      const result = await this.groqService.addKeys(trimmed);
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      let msg = `✅ Ключи обработаны:\n• Добавлено: <b>${result.added}</b>\n• Уже были (пропущено): <b>${result.skipped}</b>`;
+      if (result.errors.length) {
+        msg += `\n• Ошибки: ${result.errors.slice(0, 5).join('; ')}`;
+        if (result.errors.length > 5)
+          msg += ` … и ещё ${result.errors.length - 5}`;
+      }
+      await ctx.reply(msg, { parse_mode: 'HTML' } as any);
+      return;
+    }
 
     if (user?.state === 'BROADCAST' && user.isAdmin) {
       await this.broadcastService.handleBroadcastCommand(ctx, text.trim());
