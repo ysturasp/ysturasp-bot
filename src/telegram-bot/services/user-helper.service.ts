@@ -27,22 +27,24 @@ export class UserHelperService {
       });
       await this.userRepository.save(user);
     } else {
+      if (user.isBlocked) {
+        user.isBlocked = false;
+      }
+
       if (user.isAdmin !== (chatId === adminChatId)) {
         user.isAdmin = chatId === adminChatId;
-        await this.userRepository.save(user);
       }
       if (!user.username && ctx.from?.username) {
         user.username = ctx.from.username;
-        await this.userRepository.save(user);
       }
       if (!user.firstName && ctx.from?.first_name) {
         user.firstName = ctx.from.first_name;
-        await this.userRepository.save(user);
       }
       if (!user.lastName && ctx.from?.last_name) {
         user.lastName = ctx.from.last_name;
-        await this.userRepository.save(user);
       }
+
+      await this.userRepository.save(user);
     }
     return user;
   }
