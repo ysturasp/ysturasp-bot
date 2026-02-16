@@ -18,6 +18,7 @@ export class YearEndBroadcastService {
 
   async handleYearEndBroadcast(ctx: Context) {
     const users = await this.userRepository.find({
+      where: { isBlocked: false },
       order: { createdAt: 'ASC' },
     });
 
@@ -30,9 +31,6 @@ export class YearEndBroadcastService {
 
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
-      if (user.isBlocked) {
-        continue;
-      }
       const userOrderNumber = i + 1;
       try {
         const message = await this.generatePersonalizedMessage(

@@ -47,10 +47,12 @@ export class NotificationsService {
     let errorCount = 0;
 
     try {
-      const subs = await this.subscriptionRepository.find({
-        where: { isActive: true },
-        relations: ['user'],
-      });
+      const subs = await this.subscriptionRepository
+        .createQueryBuilder('sub')
+        .innerJoinAndSelect('sub.user', 'user')
+        .where('sub.isActive = :isActive', { isActive: true })
+        .andWhere('user.isBlocked = :isBlocked', { isBlocked: false })
+        .getMany();
       if (subs.length === 0) return;
 
       const groups = [...new Set(subs.map((s) => s.groupName))];
@@ -119,9 +121,6 @@ export class NotificationsService {
       const diffMinutes = Math.round(diffMs / 60000);
 
       for (const sub of groupSubs) {
-        if (sub.user.isBlocked) {
-          continue;
-        }
         if (
           diffMinutes <= sub.notifyMinutes &&
           diffMinutes > sub.notifyMinutes - 2

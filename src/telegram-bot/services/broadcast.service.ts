@@ -54,7 +54,9 @@ export class BroadcastService {
     ctx: Context,
     entities?: MessageEntity[],
   ) {
-    const users = await this.userRepository.find();
+    const users = await this.userRepository.find({
+      where: { isBlocked: false },
+    });
     let success = 0;
     let failed = 0;
     const blocked: string[] = [];
@@ -64,9 +66,6 @@ export class BroadcastService {
       : { parse_mode: 'HTML' as const };
 
     for (const user of users) {
-      if (user.isBlocked) {
-        continue;
-      }
       try {
         await ctx.telegram.sendMessage(user.chatId, fullText, sendOptions);
         success++;
@@ -96,7 +95,9 @@ export class BroadcastService {
     ctx: Context,
     captionEntities?: MessageEntity[],
   ) {
-    const users = await this.userRepository.find();
+    const users = await this.userRepository.find({
+      where: { isBlocked: false },
+    });
     let success = 0;
     let failed = 0;
     const blocked: string[] = [];
@@ -111,9 +112,6 @@ export class BroadcastService {
       : { parse_mode: 'HTML' as const };
 
     for (const user of users) {
-      if (user.isBlocked) {
-        continue;
-      }
       try {
         await ctx.telegram.sendPhoto(user.chatId, fileId, {
           caption: fullCaption,
@@ -146,7 +144,9 @@ export class BroadcastService {
     ctx: Context,
     captionEntities?: MessageEntity[],
   ) {
-    const users = await this.userRepository.find();
+    const users = await this.userRepository.find({
+      where: { isBlocked: false },
+    });
     let success = 0;
     let failed = 0;
     const blocked: string[] = [];
@@ -161,9 +161,6 @@ export class BroadcastService {
       : { parse_mode: 'HTML' as const };
 
     for (const user of users) {
-      if (user.isBlocked) {
-        continue;
-      }
       try {
         await ctx.telegram.sendVideo(user.chatId, fileId, {
           caption: fullCaption,

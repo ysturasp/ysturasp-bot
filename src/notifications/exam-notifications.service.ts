@@ -56,10 +56,12 @@ export class ExamNotificationsService {
   async checkExams() {
     let sentCount = 0;
 
-    const subs = await this.subscriptionRepository.find({
-      where: { isActive: true },
-      relations: ['user'],
-    });
+    const subs = await this.subscriptionRepository
+      .createQueryBuilder('sub')
+      .innerJoinAndSelect('sub.user', 'user')
+      .where('sub.isActive = :isActive', { isActive: true })
+      .andWhere('user.isBlocked = :isBlocked', { isBlocked: false })
+      .getMany();
     if (subs.length === 0) return;
     const groups = [...new Set(subs.map((s) => s.groupName))];
     const sentNotifications = new Set<string>();
@@ -182,7 +184,6 @@ export class ExamNotificationsService {
     for (const sub of subs) {
       const chatId = String(sub.user?.chatId || sub.user?.chatId);
       if (sent.has(chatId)) continue;
-      if (sub.user?.isBlocked) continue;
       sent.add(chatId);
       try {
         await this.bot.telegram.sendMessage(chatId, msg, {

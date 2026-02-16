@@ -295,9 +295,6 @@ export class GradeNotificationsService {
 
   private async checkUserGrades(user: User): Promise<boolean> {
     try {
-      if (user.isBlocked) {
-        return false;
-      }
       if (!user.chatId || !user.ystuId) {
         return false;
       }
@@ -434,6 +431,7 @@ export class GradeNotificationsService {
           AND yt.grade_notifications_enabled = TRUE
           AND u.ystu_id IS NOT NULL
           AND u."chatId" IS NOT NULL
+          AND u."isBlocked" = FALSE
       `);
 
       this.logger.debug(

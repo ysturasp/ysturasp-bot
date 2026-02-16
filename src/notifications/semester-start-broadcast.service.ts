@@ -54,9 +54,6 @@ export class SemesterStartBroadcastService {
     const errorMessages: string[] = [];
 
     for (const user of users) {
-      if (user.isBlocked) {
-        continue;
-      }
       try {
         const message = await this.generateSemesterStartMessage(user);
         await this.bot.telegram.sendMessage(user.chatId, message, {
@@ -150,6 +147,7 @@ export class SemesterStartBroadcastService {
       .createQueryBuilder('sub')
       .innerJoinAndSelect('sub.user', 'user')
       .where('sub.isActive = :isActive', { isActive: true })
+      .andWhere('user.isBlocked = :isBlocked', { isBlocked: false })
       .getMany();
 
     const userIds = new Set(subscriptionsUsers.map((s) => s.user.id));
@@ -158,13 +156,17 @@ export class SemesterStartBroadcastService {
       .createQueryBuilder('user')
       .where('user.preferredGroup IS NOT NULL')
       .andWhere('user.preferredGroup != :empty', { empty: '' })
+      .andWhere('user.isBlocked = :isBlocked', { isBlocked: false })
       .getMany();
 
     const referredGroupUserIds = usersWithReferredGroup.map((u) => u.id);
     referredGroupUserIds.forEach((id) => userIds.add(id));
 
     const uniqueUsers = await this.userRepository.find({
-      where: userIds.size > 0 ? Array.from(userIds).map((id) => ({ id })) : [],
+      where:
+        userIds.size > 0
+          ? Array.from(userIds).map((id) => ({ id, isBlocked: false }))
+          : [{ isBlocked: false }],
     });
 
     return uniqueUsers;
