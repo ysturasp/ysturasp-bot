@@ -29,6 +29,8 @@ import { AnalyticsLauncherService } from './middleware/analytics-launcher.servic
 import { AiModule } from '../ai/ai.module';
 import { UserAiContext } from '../database/entities/user-ai-context.entity';
 import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
+import { TelegrafExceptionFilter } from './filters/telegraf-exception.filter';
+import { APP_FILTER } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -65,6 +67,10 @@ import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
     StatisticsService,
     AnalyticsMiddleware,
     AnalyticsLauncherService,
+    {
+      provide: APP_FILTER,
+      useClass: TelegrafExceptionFilter,
+    },
   ],
   exports: [TelegramBotService],
 })

@@ -1,3 +1,5 @@
+import { escapeHtml, escapeMarkdown } from './html-escaper';
+
 const MOSCOW_TZ = 'Europe/Moscow';
 
 const LESSON_TYPES = {
@@ -17,13 +19,7 @@ const LESSON_TYPES = {
   256: 'Экзамен',
 };
 
-function escapeHtml(text: string | null | undefined): string {
-  if (!text) return '';
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+export { escapeHtml };
 
 export function getLessonTypeName(type: number): string {
   return LESSON_TYPES[type] || '';
@@ -75,13 +71,14 @@ export function formatSchedule(
   groupName: string,
   weekOffset = 0,
   type: 'student' | 'teacher' | 'audience' = 'student',
+  parseMode: 'HTML' | 'Markdown' = 'Markdown',
 ): string {
   if (!schedule || !schedule.items) {
     return '❌ Расписание не найдено.';
   }
 
   if (dayOffset === 'week') {
-    return formatWeekSchedule(schedule, groupName, weekOffset, type);
+    return formatWeekSchedule(schedule, groupName, weekOffset, type, parseMode);
   }
 
   if (dayOffset instanceof Date) {
@@ -90,6 +87,7 @@ export function formatSchedule(
       toMoscowStartOfDay(dayOffset),
       groupName,
       type,
+      parseMode,
     );
   }
 
@@ -98,7 +96,7 @@ export function formatSchedule(
     date.setDate(date.getDate() + dayOffset);
   }
 
-  return formatDaySchedule(schedule, date, groupName, type);
+  return formatDaySchedule(schedule, date, groupName, type, parseMode);
 }
 
 function formatDaySchedule(
@@ -106,8 +104,11 @@ function formatDaySchedule(
   targetDate: Date,
   groupName: string,
   type: 'student' | 'teacher' | 'audience' = 'student',
+  parseMode: 'HTML' | 'Markdown' = 'Markdown',
 ): string {
   targetDate.setHours(0, 0, 0, 0);
+
+  const escape = parseMode === 'HTML' ? escapeHtml : escapeMarkdown;
 
   const dayNames = [
     'Воскресенье',
@@ -142,30 +143,30 @@ function formatDaySchedule(
   }
 
   if (foundLessons.length === 0) {
-    return `📅 ${dayName} (${dateStr})\n\n🎉 Занятий нет`;
+    return `📅 ${escape(dayName)} (${escape(dateStr)})\n\n🎉 Занятий нет`;
   }
 
-  let msg = `📅 ${dayName} (${dateStr})\n\n`;
+  let msg = `📅 ${escape(dayName)} (${escape(dateStr)})\n\n`;
 
   foundLessons.forEach((lesson) => {
     if (!lesson.lessonName && !lesson.teacherName && !lesson.auditoryName) {
       return;
     }
 
-    msg += `📚 ${escapeHtml(lesson.lessonName)}\n`;
-    msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
+    msg += `📚 ${escape(lesson.lessonName)}\n`;
+    msg += `📝 ${escape(getLessonTypeName(lesson.type))}\n`;
     const time = formatLessonTime(lesson);
-    if (time) msg += `🕐 ${time}\n`;
+    if (time) msg += `🕐 ${escape(time)}\n`;
     if (lesson.teacherName && type !== 'teacher')
-      msg += `👨‍🏫 ${escapeHtml(lesson.teacherName)}\n`;
-    if (lesson.auditoryName) msg += `🏛 ${escapeHtml(lesson.auditoryName)}\n`;
+      msg += `👨‍🏫 ${escape(lesson.teacherName)}\n`;
+    if (lesson.auditoryName) msg += `🏛 ${escape(lesson.auditoryName)}\n`;
     if (
       (type === 'teacher' || type === 'audience') &&
       lesson.groups &&
       Array.isArray(lesson.groups) &&
       lesson.groups.length > 0
     ) {
-      msg += `👥 ${lesson.groups.join(', ')}\n`;
+      msg += `👥 ${escape(lesson.groups.join(', '))}\n`;
     }
     msg += '\n';
   });
@@ -178,7 +179,9 @@ function formatWeekSchedule(
   groupName: string,
   weekOffset: number,
   type: 'student' | 'teacher' | 'audience' = 'student',
+  parseMode: 'HTML' | 'Markdown' = 'Markdown',
 ): string {
+  const escape = parseMode === 'HTML' ? escapeHtml : escapeMarkdown;
   const today = toMoscowStartOfDay(new Date());
   if (weekOffset && !Number.isNaN(weekOffset)) {
     today.setDate(today.getDate() + weekOffset * 7);
@@ -193,9 +196,9 @@ function formatWeekSchedule(
     `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1)
       .toString()
       .padStart(2, '0')}`;
-  let msg = `📅 Расписание на неделю (${formatShort(
-    weekStart,
-  )} – ${formatShort(weekEnd)})\n\n`;
+  let msg = `📅 Расписание на неделю (${escape(formatShort(weekStart))} – ${escape(
+    formatShort(weekEnd),
+  )})\n\n`;
 
   const daysWithLessons: Array<{ date: Date; lessons: any[] }> = [];
 
@@ -230,27 +233,27 @@ function formatWeekSchedule(
       (day.date.getMonth() + 1).toString().padStart(2, '0');
     const dayName = dayNames[day.date.getDay()];
 
-    msg += `━━━ ${dayName} ${dateStr} ━━━\n\n`;
+    msg += `━━━ ${escape(dayName)} ${escape(dateStr)} ━━━\n\n`;
 
     day.lessons.forEach((lesson) => {
       if (!lesson.lessonName && !lesson.teacherName && !lesson.auditoryName) {
         return;
       }
 
-      msg += `📚 ${escapeHtml(lesson.lessonName)}\n`;
-      msg += `📝 ${getLessonTypeName(lesson.type)}\n`;
+      msg += `📚 ${escape(lesson.lessonName)}\n`;
+      msg += `📝 ${escape(getLessonTypeName(lesson.type))}\n`;
       const time = formatLessonTime(lesson);
-      if (time) msg += `🕐 ${time}\n`;
+      if (time) msg += `🕐 ${escape(time)}\n`;
       if (lesson.teacherName && type !== 'teacher')
-        msg += `👨‍🏫 ${escapeHtml(lesson.teacherName)}\n`;
-      if (lesson.auditoryName) msg += `🏛 ${escapeHtml(lesson.auditoryName)}\n`;
+        msg += `👨‍🏫 ${escape(lesson.teacherName)}\n`;
+      if (lesson.auditoryName) msg += `🏛 ${escape(lesson.auditoryName)}\n`;
       if (
         (type === 'teacher' || type === 'audience') &&
         lesson.groups &&
         Array.isArray(lesson.groups) &&
         lesson.groups.length > 0
       ) {
-        msg += `👥 ${lesson.groups.join(', ')}\n`;
+        msg += `👥 ${escape(lesson.groups.join(', '))}\n`;
       }
       msg += '\n';
     });

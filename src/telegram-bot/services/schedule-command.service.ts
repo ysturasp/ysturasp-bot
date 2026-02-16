@@ -6,7 +6,7 @@ import { User } from '../../database/entities/user.entity';
 import { Subscription } from '../../database/entities/subscription.entity';
 import { Exam } from '../../database/entities/exam.entity';
 import { ScheduleService } from '../../schedule/schedule.service';
-import { formatSchedule } from '../../helpers/schedule-formatter';
+import { formatSchedule, escapeHtml } from '../../helpers/schedule-formatter';
 import { StatisticsService, InstituteId } from './statistics.service';
 import { normalizeAudienceName } from '../../helpers/group-normalizer';
 import { AnalyticsService } from '../../analytics/analytics.service';
@@ -173,10 +173,12 @@ export class ScheduleCommandService {
     );
     const currentGroup = groupsWithExams[currentIndex];
 
-    let msg = `🎓 <b>Экзамены для группы ${currentGroup.groupName}</b>\n\n`;
+    let msg = `🎓 <b>Экзамены для группы ${escapeHtml(currentGroup.groupName)}</b>\n\n`;
 
     for (const exam of currentGroup.exams) {
-      msg += `📚 ${exam.lessonName}\n🕐 ${formatDate(exam.date)}\n${exam.teacherName ? '👨‍🏫 ' + exam.teacherName + '\n' : ''}${exam.auditoryName ? '🏛 ' + exam.auditoryName + '\n' : ''}`;
+      msg += `📚 ${escapeHtml(exam.lessonName)}\n🕐 ${escapeHtml(formatDate(exam.date))}\n${
+        exam.teacherName ? '👨‍🏫 ' + escapeHtml(exam.teacherName) + '\n' : ''
+      }${exam.auditoryName ? '🏛 ' + escapeHtml(exam.auditoryName) + '\n' : ''}`;
 
       if (currentGroup.institute) {
         try {
@@ -375,6 +377,7 @@ export class ScheduleCommandService {
       groupName,
       weekOffset,
       'student',
+      'HTML',
     );
 
     const keyboard = Markup.inlineKeyboard([
@@ -433,7 +436,7 @@ export class ScheduleCommandService {
     ]);
 
     await ctx.editMessageText(
-      `✅ Нашёл группу <b>${groupName}</b>!\n\nЧто вы хотите сделать?`,
+      `✅ Нашёл группу <b>${escapeHtml(groupName)}</b>!\n\nЧто вы хотите сделать?`,
       { parse_mode: 'HTML', ...keyboard },
     );
   }
@@ -491,6 +494,7 @@ export class ScheduleCommandService {
         groupName,
         weekOffset,
         'student',
+        'HTML',
       );
       const keyboard = Markup.inlineKeyboard([
         [
@@ -625,7 +629,7 @@ export class ScheduleCommandService {
     const keyboard = Markup.inlineKeyboard(rows);
 
     await ctx.editMessageText(
-      `👨‍🏫 Выбрано: <b>${teacher.name}</b>\nПоказать расписание?`,
+      `👨‍🏫 Выбрано: <b>${escapeHtml(teacher.name)}</b>\nПоказать расписание?`,
       { parse_mode: 'HTML', ...keyboard },
     );
   }
@@ -742,7 +746,14 @@ export class ScheduleCommandService {
         source: 'telegram',
       })
       .catch(() => {});
-    const message = formatSchedule(schedule, dayOffset, '', 0, 'teacher');
+    const message = formatSchedule(
+      schedule,
+      dayOffset,
+      '',
+      0,
+      'teacher',
+      'Markdown',
+    );
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
       : `quick_select_teacher:${teacherId}`;
@@ -781,7 +792,14 @@ export class ScheduleCommandService {
         source: 'telegram',
       })
       .catch(() => {});
-    const message = formatSchedule(schedule, 'week', '', weekOffset, 'teacher');
+    const message = formatSchedule(
+      schedule,
+      'week',
+      '',
+      weekOffset,
+      'teacher',
+      'Markdown',
+    );
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
       : `quick_select_teacher:${teacherId}`;
@@ -831,7 +849,14 @@ export class ScheduleCommandService {
         source: 'telegram',
       })
       .catch(() => {});
-    const message = formatSchedule(schedule, dayOffset, '', 0, 'audience');
+    const message = formatSchedule(
+      schedule,
+      dayOffset,
+      '',
+      0,
+      'audience',
+      'Markdown',
+    );
     const backAction = query
       ? `quick_select_audience:${audienceId}:${query}`
       : `quick_select_audience:${audienceId}`;
@@ -876,6 +901,7 @@ export class ScheduleCommandService {
       '',
       weekOffset,
       'audience',
+      'Markdown',
     );
     const backAction = query
       ? `quick_select_audience:${audienceId}:${query}`

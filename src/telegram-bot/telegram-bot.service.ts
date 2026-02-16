@@ -27,6 +27,7 @@ import { UserAiContext } from '../database/entities/user-ai-context.entity';
 import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
 import { YooCheckout, ICreateRefund } from '@a2seven/yoo-checkout';
 import * as crypto from 'crypto';
+import { escapeHtml } from '../helpers/html-escaper';
 
 @Update()
 @Injectable()
@@ -91,11 +92,11 @@ export class TelegramBotService {
       `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь';
     const username = user.username ? `@${user.username}` : 'нет username';
 
-    let info = `👤 <b>Пользователь:</b> ${name} (${username})\n`;
-    info += `🆔 <b>Chat ID:</b> <code>${user.chatId}</code>\n`;
+    let info = `👤 <b>Пользователь:</b> ${escapeHtml(name)} (${escapeHtml(username)})\n`;
+    info += `🆔 <b>Chat ID:</b> <code>${escapeHtml(user.chatId)}</code>\n`;
 
     if (user.preferredGroup) {
-      info += `📚 <b>Выбранная группа:</b> ${user.preferredGroup}\n`;
+      info += `📚 <b>Выбранная группа:</b> ${escapeHtml(user.preferredGroup)}\n`;
     }
 
     try {
@@ -463,9 +464,7 @@ export class TelegramBotService {
         Markup.button.callback('⬆️ Улучшить тариф (AI Plus)', 'open_ai_plus'),
       ]);
     }
-    rows.push([
-      Markup.button.callback('⬅️ Главное меню', 'back_to_main_profile'),
-    ]);
+    rows.push([Markup.button.callback('« Назад', 'back_to_main_profile')]);
 
     const message =
       `👤 <b>Ваш профиль:</b>\n` +
@@ -718,7 +717,7 @@ export class TelegramBotService {
         ),
       ]);
     }
-    kbRows.push([Markup.button.callback('⬅️ Назад к профилю', 'open_profile')]);
+    kbRows.push([Markup.button.callback('« Назад', 'open_profile')]);
 
     const keyboard = Markup.inlineKeyboard(kbRows);
 
@@ -866,7 +865,7 @@ export class TelegramBotService {
         Markup.button.callback('👁️ Vision', 'category:vision'),
         Markup.button.callback('🤖 Others', 'category:others'),
       ],
-      [Markup.button.callback('⬅️ Профиль', 'open_profile')],
+      [Markup.button.callback('« Назад', 'open_profile')],
     ]);
 
     const text =
@@ -942,10 +941,7 @@ export class TelegramBotService {
         `set_ai_model:${m.id}`,
       ),
     ]);
-    buttons.push([
-      Markup.button.callback('⬅️ Категории', 'back_to_categories'),
-      Markup.button.callback('⬅️ Профиль', 'open_profile'),
-    ]);
+    buttons.push([Markup.button.callback('« Назад', 'back_to_categories')]);
 
     await ctx.editMessageText(title, Markup.inlineKeyboard(buttons));
   }
@@ -964,7 +960,7 @@ export class TelegramBotService {
         Markup.button.callback('👁️ Vision', 'category:vision'),
         Markup.button.callback('🤖 Others', 'category:others'),
       ],
-      [Markup.button.callback('⬅️ Профиль', 'open_profile')],
+      [Markup.button.callback('« Назад', 'open_profile')],
     ]);
 
     await ctx.editMessageText(
@@ -2054,7 +2050,7 @@ export class TelegramBotService {
         const userInfo = await this.getUserInfoForAdmin(user);
         const helpMessage = this.textHandlerService.getHelpMessage();
 
-        const info = `❓ <b>Нераспознанное сообщение</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос:</b>\n${text}\n\n<b>✅ Ответ пользователю:</b>\n${helpMessage}`;
+        const info = `❓ <b>Нераспознанное сообщение</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос:</b>\n${escapeHtml(text)}\n\n<b>✅ Ответ пользователю:</b>\n${escapeHtml(helpMessage)}`;
         const kb = Markup.inlineKeyboard([
           [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
         ]);

@@ -29,10 +29,6 @@ export class GroqService implements OnModuleInit {
     }
   }
 
-  /**
-   * Добавляет ключи в БД. Вход: строка с ключами через запятую или перенос строки.
-   * Дубликаты пропускаются. Возвращает счётчики и список ошибок.
-   */
   async addKeys(rawInput: string): Promise<{
     added: number;
     skipped: number;
