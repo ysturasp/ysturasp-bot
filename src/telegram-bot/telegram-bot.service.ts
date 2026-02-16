@@ -1655,7 +1655,11 @@ export class TelegramBotService {
       return;
     }
 
-    const text = (ctx.message as any).text;
+    const msg = ctx.message as {
+      text: string;
+      entities?: import('telegraf/types').MessageEntity[];
+    };
+    const text = msg.text;
     const broadcastText = text.replace('/broadcast', '').trim();
 
     if (!broadcastText) {
@@ -1665,7 +1669,22 @@ export class TelegramBotService {
       return;
     }
 
-    await this.broadcastService.handleBroadcastCommand(ctx, broadcastText);
+    const startIndex = text.indexOf(broadcastText);
+    const entities =
+      startIndex >= 0 && msg.entities?.length
+        ? msg.entities
+            .map((e) => ({ ...e, offset: e.offset - startIndex }))
+            .filter(
+              (e) =>
+                e.offset >= 0 && e.offset + e.length <= broadcastText.length,
+            )
+        : undefined;
+
+    await this.broadcastService.handleBroadcastCommand(
+      ctx,
+      broadcastText,
+      entities,
+    );
   }
 
   @Command('reply')
@@ -2012,7 +2031,15 @@ export class TelegramBotService {
     }
 
     if (user?.state === 'BROADCAST' && user.isAdmin) {
-      await this.broadcastService.handleBroadcastCommand(ctx, text.trim());
+      const msg = ctx.message as {
+        text?: string;
+        entities?: import('telegraf/types').MessageEntity[];
+      };
+      await this.broadcastService.handleBroadcastCommand(
+        ctx,
+        text.trim(),
+        msg.entities,
+      );
       user.state = null;
       user.stateData = null;
       await this.userRepository.save(user);
@@ -2137,7 +2164,17 @@ export class TelegramBotService {
     }
 
     if (user.state === 'BROADCAST' && user.isAdmin) {
-      await this.broadcastService.handleBroadcastPhoto(ctx, fileId, caption);
+      const captionEntities = (
+        message as {
+          caption_entities?: import('telegraf/types').MessageEntity[];
+        }
+      ).caption_entities;
+      await this.broadcastService.handleBroadcastPhoto(
+        ctx,
+        fileId,
+        caption,
+        captionEntities,
+      );
       user.state = null;
       user.stateData = null;
       await this.userRepository.save(user);
@@ -2157,11 +2194,27 @@ export class TelegramBotService {
     }
 
     if (user.isAdmin && message.caption?.startsWith('/broadcast')) {
-      const broadcastCaption = message.caption.replace('/broadcast', '').trim();
+      const fullCaption = message.caption;
+      const broadcastCaption = fullCaption.replace('/broadcast', '').trim();
+      const startIdx = fullCaption.indexOf(broadcastCaption);
+      const captionEntities =
+        startIdx >= 0 && (message as any).caption_entities?.length
+          ? (message as any).caption_entities
+              .map((e: import('telegraf/types').MessageEntity) => ({
+                ...e,
+                offset: e.offset - startIdx,
+              }))
+              .filter(
+                (e: import('telegraf/types').MessageEntity) =>
+                  e.offset >= 0 &&
+                  e.offset + e.length <= broadcastCaption.length,
+              )
+          : undefined;
       await this.broadcastService.handleBroadcastPhoto(
         ctx,
         fileId,
         broadcastCaption,
+        captionEntities,
       );
       return;
     }
@@ -2203,7 +2256,17 @@ export class TelegramBotService {
     const caption = message.caption || '';
 
     if (user.state === 'BROADCAST' && user.isAdmin) {
-      await this.broadcastService.handleBroadcastVideo(ctx, fileId, caption);
+      const captionEntities = (
+        message as {
+          caption_entities?: import('telegraf/types').MessageEntity[];
+        }
+      ).caption_entities;
+      await this.broadcastService.handleBroadcastVideo(
+        ctx,
+        fileId,
+        caption,
+        captionEntities,
+      );
       user.state = null;
       user.stateData = null;
       await this.userRepository.save(user);
@@ -2249,11 +2312,27 @@ export class TelegramBotService {
     }
 
     if (user.isAdmin && message.caption?.startsWith('/broadcast')) {
-      const broadcastCaption = message.caption.replace('/broadcast', '').trim();
+      const fullCaption = message.caption;
+      const broadcastCaption = fullCaption.replace('/broadcast', '').trim();
+      const startIdx = fullCaption.indexOf(broadcastCaption);
+      const captionEntities =
+        startIdx >= 0 && (message as any).caption_entities?.length
+          ? (message as any).caption_entities
+              .map((e: import('telegraf/types').MessageEntity) => ({
+                ...e,
+                offset: e.offset - startIdx,
+              }))
+              .filter(
+                (e: import('telegraf/types').MessageEntity) =>
+                  e.offset >= 0 &&
+                  e.offset + e.length <= broadcastCaption.length,
+              )
+          : undefined;
       await this.broadcastService.handleBroadcastVideo(
         ctx,
         fileId,
         broadcastCaption,
+        captionEntities,
       );
       return;
     }
