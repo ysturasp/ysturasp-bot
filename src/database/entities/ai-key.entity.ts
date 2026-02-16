@@ -38,6 +38,9 @@ export class AiKey {
   @Column({ type: 'integer', default: 0 })
   totalRequests: number;
 
+  @Column({ type: 'integer', nullable: true })
+  limitRequestsRPD: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

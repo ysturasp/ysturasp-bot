@@ -1,9 +1,13 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, MoreThan, IsNull } from 'typeorm';
 import { AiKey } from '../database/entities/ai-key.entity';
 import axios from 'axios';
 import * as FormData from 'form-data';
+
+const DEFAULT_GROQ_RPM = 30;
+const DEFAULT_GROQ_RPD = 1000;
 
 export class GroqService implements OnModuleInit {
   private readonly logger = new Logger(GroqService.name);
@@ -14,6 +18,7 @@ export class GroqService implements OnModuleInit {
   constructor(
     @InjectRepository(AiKey)
     private readonly aiKeyRepository: Repository<AiKey>,
+    private readonly configService: ConfigService,
   ) {}
 
   async onModuleInit() {
@@ -102,13 +107,26 @@ export class GroqService implements OnModuleInit {
       await this.updateKeyLimits(aiKey, response.headers, response.data.usage);
 
       return response.data.choices[0].message.content;
-    } catch (error) {
+    } catch (error: any) {
       if (error.response) {
+        const status = error.response.status;
+        const code = error.response.data?.error?.code;
+        if (
+          status === 401 ||
+          status === 403 ||
+          (status === 400 && code === 'organization_restricted')
+        ) {
+          await this.aiKeyRepository.remove(aiKey);
+          this.logger.warn(
+            `Removed dead Groq key: ${aiKey.key.substring(0, 10)}...`,
+          );
+          return this.chatCompletion(messages, model);
+        }
         await this.updateKeyLimits(aiKey, error.response.headers);
         this.logger.error(
-          `Groq API error (${model}): ${error.response.status} - ${JSON.stringify(error.response.data)}`,
+          `Groq API error (${model}): ${status} - ${JSON.stringify(error.response.data)}`,
         );
-        if (error.response.status === 429) {
+        if (status === 429) {
           return this.chatCompletion(messages, model);
         }
       }
@@ -146,27 +164,29 @@ export class GroqService implements OnModuleInit {
       return { ok: true, status: response.status };
     } catch (error: any) {
       if (error.response) {
-        await this.updateKeyLimits(aiKey, error.response.headers, undefined, {
-          skipStats: true,
-        });
         const status = error.response.status;
         const data = error.response.data;
-
         const code = data?.error?.code;
+
         if (
           status === 401 ||
           status === 403 ||
           (status === 400 && code === 'organization_restricted')
         ) {
-          aiKey.isActive = false;
-          await this.aiKeyRepository.save(aiKey);
+          await this.aiKeyRepository.remove(aiKey);
           this.logger.warn(
-            `Deactivated Groq key due to auth error: ${aiKey.key.substring(
-              0,
-              10,
-            )}...`,
+            `Removed dead Groq key: ${aiKey.key.substring(0, 10)}...`,
           );
+          return {
+            ok: false,
+            status,
+            error: typeof data === 'string' ? data : JSON.stringify(data),
+          };
         }
+
+        await this.updateKeyLimits(aiKey, error.response.headers, undefined, {
+          skipStats: true,
+        });
 
         this.logger.error(
           `Groq health-check error (${model}): ${status} - ${JSON.stringify(
@@ -208,11 +228,24 @@ export class GroqService implements OnModuleInit {
 
       await this.updateKeyLimits(aiKey, response.headers);
       return response.data.text;
-    } catch (error) {
+    } catch (error: any) {
       if (error.response) {
+        const status = error.response.status;
+        const code = error.response.data?.error?.code;
+        if (
+          status === 401 ||
+          status === 403 ||
+          (status === 400 && code === 'organization_restricted')
+        ) {
+          await this.aiKeyRepository.remove(aiKey);
+          this.logger.warn(
+            `Removed dead Groq key: ${aiKey.key.substring(0, 10)}...`,
+          );
+          return this.transcribe(buffer, filename);
+        }
         await this.updateKeyLimits(aiKey, error.response.headers);
         this.logger.error(
-          `Groq STT error: ${error.response.status} - ${JSON.stringify(error.response.data)}`,
+          `Groq STT error: ${status} - ${JSON.stringify(error.response.data)}`,
         );
       }
       throw error;
@@ -272,11 +305,18 @@ export class GroqService implements OnModuleInit {
       headers['x-ratelimit-remaining-tokens'],
       10,
     );
+    const limitRequestsRPD = parseInt(
+      headers['x-ratelimit-limit-requests'],
+      10,
+    );
     const resetRequestsStr = headers['x-ratelimit-reset-requests'];
     const resetTokensStr = headers['x-ratelimit-reset-tokens'];
 
     if (!isNaN(remainingRequests)) key.remainingRequests = remainingRequests;
     if (!isNaN(remainingTokens)) key.remainingTokens = remainingTokens;
+    if (!isNaN(limitRequestsRPD) && limitRequestsRPD > 0) {
+      key.limitRequestsRPD = limitRequestsRPD;
+    }
 
     if (resetRequestsStr) {
       key.resetRequestsAt = this.parseResetTime(resetRequestsStr);
@@ -376,5 +416,36 @@ export class GroqService implements OnModuleInit {
     }
 
     return results;
+  }
+
+  async getRequiredMinKeys(userCount: number): Promise<number> {
+    const rpmPerKey =
+      this.configService.get<number>('GROQ_RPM_PER_KEY') ?? DEFAULT_GROQ_RPM;
+    const concurrentFraction =
+      this.configService.get<number>('AI_KEYS_CONCURRENT_FRACTION') ?? 1;
+    const requestsPerUserPerDay =
+      this.configService.get<number>('AI_KEYS_REQUESTS_PER_USER_DAY') ?? 3;
+    const minFloor = this.configService.get<number>('AI_KEYS_MIN_FLOOR') ?? 3;
+
+    let rpdPerKey =
+      this.configService.get<number>('GROQ_RPD_PER_KEY') ?? DEFAULT_GROQ_RPD;
+    const keys = await this.aiKeyRepository.find({
+      where: { isActive: true },
+    });
+    const keyWithLimit = keys.find((k) => k.limitRequestsRPD != null);
+    if (keyWithLimit?.limitRequestsRPD) {
+      rpdPerKey = keyWithLimit.limitRequestsRPD;
+    }
+
+    const peakConcurrent = Math.max(
+      1,
+      Math.ceil(userCount * concurrentFraction),
+    );
+    const minFromRpm = Math.ceil(peakConcurrent / rpmPerKey);
+
+    const dailyRequests = userCount * requestsPerUserPerDay;
+    const minFromRpd = Math.ceil(dailyRequests / rpdPerKey);
+
+    return Math.max(minFloor, minFromRpm, minFromRpd);
   }
 }

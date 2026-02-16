@@ -8,13 +8,19 @@ import { UserAiSubscription } from '../database/entities/user-ai-subscription.en
 import { GroqService } from './groq.service';
 import { AiLimitService } from './ai-limit.service';
 import { AiSubscriptionService } from './ai-subscription.service';
+import { AiKeysCheckService } from './ai-keys-check.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, AiKey, UserAiUsage, UserAiSubscription]),
     ConfigModule,
   ],
-  providers: [GroqService, AiLimitService, AiSubscriptionService],
+  providers: [
+    GroqService,
+    AiLimitService,
+    AiSubscriptionService,
+    AiKeysCheckService,
+  ],
   exports: [GroqService, AiLimitService, AiSubscriptionService],
 })
 export class AiModule {}

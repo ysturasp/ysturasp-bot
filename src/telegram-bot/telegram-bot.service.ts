@@ -332,11 +332,15 @@ export class TelegramBotService {
     if (!user.isAdmin) return;
 
     const stats = await this.groqService.getPoolStats();
+    const userCount = await this.userRepository.count();
+    const requiredMinKeys =
+      await this.groqService.getRequiredMinKeys(userCount);
 
     const message =
       `📊 <b>Статистика ИИ:</b>\n\n` +
       `🔑 Ключей всего: <b>${stats.totalKeys}</b>\n` +
       `✅ Активных: <b>${stats.activeKeys}</b>\n` +
+      `📋 Рекомендуемый минимум: <b>${requiredMinKeys}</b> (для ${userCount} польз.)\n` +
       `🚫 Лимиты исчерпаны: <b>${stats.limitedKeys}</b>\n\n` +
       `✨ Использовано токенов: <b>${stats.totalTokens.toLocaleString('ru-RU')}</b>\n` +
       `💬 Всего запросов к ИИ: <b>${stats.totalRequests}</b>\n\n` +
