@@ -140,11 +140,15 @@ export class GroqService implements OnModuleInit {
         },
       );
 
-      await this.updateKeyLimits(aiKey, response.headers, response.data.usage);
+      await this.updateKeyLimits(aiKey, response.headers, response.data.usage, {
+        skipStats: true,
+      });
       return { ok: true, status: response.status };
     } catch (error: any) {
       if (error.response) {
-        await this.updateKeyLimits(aiKey, error.response.headers);
+        await this.updateKeyLimits(aiKey, error.response.headers, undefined, {
+          skipStats: true,
+        });
         const status = error.response.status;
         const data = error.response.data;
 
@@ -258,6 +262,7 @@ export class GroqService implements OnModuleInit {
     key: AiKey,
     headers: any,
     usage?: any,
+    opts?: { skipStats?: boolean },
   ): Promise<void> {
     const remainingRequests = parseInt(
       headers['x-ratelimit-remaining-requests'],
@@ -280,7 +285,7 @@ export class GroqService implements OnModuleInit {
       key.resetTokensAt = this.parseResetTime(resetTokensStr);
     }
 
-    if (usage) {
+    if (usage && !opts?.skipStats) {
       key.totalTokens = Number(key.totalTokens) + (usage.total_tokens || 0);
       key.totalRequests += 1;
     }
