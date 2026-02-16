@@ -119,6 +119,9 @@ export class NotificationsService {
       const diffMinutes = Math.round(diffMs / 60000);
 
       for (const sub of groupSubs) {
+        if (sub.user.isBlocked) {
+          continue;
+        }
         if (
           diffMinutes <= sub.notifyMinutes &&
           diffMinutes > sub.notifyMinutes - 2

@@ -64,13 +64,23 @@ export class BroadcastService {
       : { parse_mode: 'HTML' as const };
 
     for (const user of users) {
+      if (user.isBlocked) {
+        continue;
+      }
       try {
         await ctx.telegram.sendMessage(user.chatId, fullText, sendOptions);
         success++;
       } catch (e: any) {
         failed++;
-        if (e.response?.error_code === 403) {
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
           blocked.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+          }
         }
       }
     }
@@ -101,6 +111,9 @@ export class BroadcastService {
       : { parse_mode: 'HTML' as const };
 
     for (const user of users) {
+      if (user.isBlocked) {
+        continue;
+      }
       try {
         await ctx.telegram.sendPhoto(user.chatId, fileId, {
           caption: fullCaption,
@@ -109,8 +122,15 @@ export class BroadcastService {
         success++;
       } catch (e: any) {
         failed++;
-        if (e.response?.error_code === 403) {
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
           blocked.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+          }
         }
       }
     }
@@ -141,6 +161,9 @@ export class BroadcastService {
       : { parse_mode: 'HTML' as const };
 
     for (const user of users) {
+      if (user.isBlocked) {
+        continue;
+      }
       try {
         await ctx.telegram.sendVideo(user.chatId, fileId, {
           caption: fullCaption,
@@ -149,8 +172,15 @@ export class BroadcastService {
         success++;
       } catch (e: any) {
         failed++;
-        if (e.response?.error_code === 403) {
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
           blocked.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+          }
         }
       }
     }

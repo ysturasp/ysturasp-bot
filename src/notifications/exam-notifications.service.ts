@@ -182,6 +182,7 @@ export class ExamNotificationsService {
     for (const sub of subs) {
       const chatId = String(sub.user?.chatId || sub.user?.chatId);
       if (sent.has(chatId)) continue;
+      if (sub.user?.isBlocked) continue;
       sent.add(chatId);
       try {
         await this.bot.telegram.sendMessage(chatId, msg, {

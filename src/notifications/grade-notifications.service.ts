@@ -295,6 +295,9 @@ export class GradeNotificationsService {
 
   private async checkUserGrades(user: User): Promise<boolean> {
     try {
+      if (user.isBlocked) {
+        return false;
+      }
       if (!user.chatId || !user.ystuId) {
         return false;
       }

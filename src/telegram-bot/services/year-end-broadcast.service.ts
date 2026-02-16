@@ -30,6 +30,9 @@ export class YearEndBroadcastService {
 
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
+      if (user.isBlocked) {
+        continue;
+      }
       const userOrderNumber = i + 1;
       try {
         const message = await this.generatePersonalizedMessage(
@@ -45,8 +48,18 @@ export class YearEndBroadcastService {
         await new Promise((resolve) => setTimeout(resolve, 50));
       } catch (e: any) {
         failed++;
-        if (e.response?.error_code === 403) {
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
           blocked.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+            this.logger.log(
+              `User ${user.chatId} marked as blocked due to 403 error`,
+            );
+          }
         }
         this.logger.error(`Failed to send message to user ${user.chatId}`, e);
       }

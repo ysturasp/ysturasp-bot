@@ -54,6 +54,9 @@ export class SemesterStartBroadcastService {
     const errorMessages: string[] = [];
 
     for (const user of users) {
+      if (user.isBlocked) {
+        continue;
+      }
       try {
         const message = await this.generateSemesterStartMessage(user);
         await this.bot.telegram.sendMessage(user.chatId, message, {
