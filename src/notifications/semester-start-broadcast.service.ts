@@ -62,9 +62,19 @@ export class SemesterStartBroadcastService {
         success++;
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (e: any) {
-        if (e.response?.error_code === 403) {
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
           blocked++;
           blockedUsers.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+            this.logger.log(
+              `User ${user.chatId} marked as blocked due to 403 error`,
+            );
+          }
         } else {
           errors++;
           const errorMsg = `${user.username || user.chatId}: ${e.message || 'Unknown error'}`;

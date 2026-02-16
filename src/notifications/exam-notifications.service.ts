@@ -6,6 +6,7 @@ import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';
 import { Exam } from '../database/entities/exam.entity';
 import { Subscription } from '../database/entities/subscription.entity';
+import { User } from '../database/entities/user.entity';
 import { ScheduleService } from '../schedule/schedule.service';
 import { getLessonTypeName } from '../helpers/schedule-formatter';
 import { AnalyticsService } from '../analytics/analytics.service';
@@ -19,6 +20,8 @@ export class ExamNotificationsService {
     private readonly examRepository: Repository<Exam>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly scheduleService: ScheduleService,
     @InjectBot() private readonly bot: Telegraf,
     private readonly analyticsService: AnalyticsService,
@@ -193,8 +196,20 @@ export class ExamNotificationsService {
               : 'notification:exam_changed',
           payload: { examId: exam.id },
         });
-      } catch (e) {
+      } catch (e: any) {
         this.logger.error(`Failed to send exam notification to ${chatId}`, e);
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
+          if (sub.user && !sub.user.isBlocked) {
+            sub.user.isBlocked = true;
+            await this.userRepository.save(sub.user);
+            this.logger.log(
+              `User ${chatId} marked as blocked due to 403 error`,
+            );
+          }
+        }
       }
     }
   }

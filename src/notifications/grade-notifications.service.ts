@@ -345,6 +345,18 @@ export class GradeNotificationsService {
             `Failed to send grade notification to ${user.chatId}:`,
             error,
           );
+          if (
+            error.response?.error_code === 403 ||
+            error.message?.includes('bot was blocked')
+          ) {
+            if (!user.isBlocked) {
+              user.isBlocked = true;
+              await this.userRepository.save(user);
+              this.logger.log(
+                `User ${user.chatId} marked as blocked due to 403 error`,
+              );
+            }
+          }
         }
       }
 

@@ -7,6 +7,7 @@ import { Telegraf } from 'telegraf';
 import Redis from 'ioredis';
 import { Subscription } from '../database/entities/subscription.entity';
 import { BotEvent } from '../database/entities/bot-event.entity';
+import { User } from '../database/entities/user.entity';
 import { ScheduleService } from '../schedule/schedule.service';
 import { getLessonTypeName } from '../helpers/schedule-formatter';
 import { formatMinutes } from '../helpers/time-parser';
@@ -21,6 +22,8 @@ export class NotificationsService {
     private readonly subscriptionRepository: Repository<Subscription>,
     @InjectRepository(BotEvent)
     private readonly botEventRepository: Repository<BotEvent>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly scheduleService: ScheduleService,
     @InjectBot() private readonly bot: Telegraf,
     private readonly analyticsService: AnalyticsService,
@@ -169,11 +172,24 @@ ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`.trim();
       this.logger.log(
         `Notification sent to ${sub.user.chatId} for ${groupName}: ${lesson.lessonName}`,
       );
-    } catch (e) {
+    } catch (e: any) {
       this.logger.error(
         `Failed to send notification to ${sub.user.chatId} for ${groupName}`,
         e,
       );
+
+      if (
+        e.response?.error_code === 403 ||
+        e.message?.includes('bot was blocked')
+      ) {
+        if (!sub.user.isBlocked) {
+          sub.user.isBlocked = true;
+          await this.userRepository.save(sub.user);
+          this.logger.log(
+            `User ${sub.user.chatId} marked as blocked due to 403 error`,
+          );
+        }
+      }
     }
   }
 }
