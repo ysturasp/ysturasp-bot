@@ -160,6 +160,7 @@ function formatDaySchedule(
     if (lesson.teacherName && type !== 'teacher')
       msg += `👨‍🏫 ${escape(lesson.teacherName)}\n`;
     if (lesson.auditoryName) msg += `🏛 ${escape(lesson.auditoryName)}\n`;
+    if (lesson.isDistant) msg += `💻 ${escape('Дистанционно')}\n`;
     if (
       (type === 'teacher' || type === 'audience') &&
       lesson.groups &&
@@ -247,6 +248,7 @@ function formatWeekSchedule(
       if (lesson.teacherName && type !== 'teacher')
         msg += `👨‍🏫 ${escape(lesson.teacherName)}\n`;
       if (lesson.auditoryName) msg += `🏛 ${escape(lesson.auditoryName)}\n`;
+      if (lesson.isDistant) msg += `💻 ${escape('Дистанционно')}\n`;
       if (
         (type === 'teacher' || type === 'audience') &&
         lesson.groups &&
