@@ -334,8 +334,30 @@ export class SupportService {
       }
 
       await ctx.reply('Ответ отправлен!');
-    } catch (e) {
-      await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
+    } catch (e: any) {
+      this.logger.error(`Failed to send support reply to ${targetChatId}`, e);
+
+      const user =
+        (await this.userRepository.findOne({
+          where: { chatId: targetChatId },
+        })) || null;
+
+      const isBlockedError =
+        e.response?.error_code === 403 ||
+        e.message?.includes('bot was blocked');
+
+      if (user && isBlockedError) {
+        if (!user.isBlocked) {
+          user.isBlocked = true;
+          await this.userRepository.save(user);
+        }
+
+        await ctx.reply(
+          '⚠️ Ответ не доставлен: пользователь заблокировал бота или отключил переписку.',
+        );
+      } else {
+        await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
+      }
     }
   }
 
@@ -413,8 +435,33 @@ export class SupportService {
       user.stateData = null;
       await this.userRepository.save(user);
       await ctx.reply('Ответ с фото отправлен!');
-    } catch (e) {
-      await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
+    } catch (e: any) {
+      this.logger.error(
+        `Failed to send support photo reply to ${targetChatId}`,
+        e,
+      );
+
+      const targetUser =
+        (await this.userRepository.findOne({
+          where: { chatId: targetChatId },
+        })) || null;
+
+      const isBlockedError =
+        e.response?.error_code === 403 ||
+        e.message?.includes('bot was blocked');
+
+      if (targetUser && isBlockedError) {
+        if (!targetUser.isBlocked) {
+          targetUser.isBlocked = true;
+          await this.userRepository.save(targetUser);
+        }
+
+        await ctx.reply(
+          '⚠️ Ответ не доставлен: пользователь заблокировал бота или отключил переписку.',
+        );
+      } else {
+        await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
+      }
     }
   }
 
