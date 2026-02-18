@@ -150,7 +150,9 @@ export class NotificationsService {
 🕐 Через ${formatMinutes(sub.notifyMinutes)} (${lesson.timeRange})
 📚 ${lesson.lessonName}
 📝 ${getLessonTypeName(lesson.type)}
-${lesson.auditoryName ? `🏛 ${lesson.auditoryName}` : ''}
+${lesson.auditoryName ? `🏛 ${lesson.auditoryName}` : ''}${
+      lesson.isDistant ? `\n💻 Дистанционно` : ''
+    }
 ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`.trim();
 
     try {

@@ -71,6 +71,7 @@ export class NotificationTestService {
             `📚 Предмет: ${closestLesson.lessonName}\n` +
             `📝 Тип: ${this.getLessonTypeName(closestLesson.type)}\n` +
             `🕐 Время: ${closestLesson.timeRange}\n` +
+            (closestLesson.isDistant ? `💻 Формат: дистанционно\n` : '') +
             (closestLesson.teacherName
               ? `👨‍🏫 Преподаватель: ${closestLesson.teacherName}\n`
               : '') +
