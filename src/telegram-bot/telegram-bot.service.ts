@@ -2167,6 +2167,12 @@ export class TelegramBotService {
       }
     }
 
+    if (user.state === 'ADMIN_REPLY' && user.isAdmin) {
+      await this.supportService.handleReplyPhoto(ctx, user, fileId, caption);
+      await this.userRepository.save(user);
+      return;
+    }
+
     if (user.state === 'BROADCAST' && user.isAdmin) {
       const captionEntities = (
         message as {

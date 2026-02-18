@@ -355,21 +355,38 @@ export class SupportService {
     user.stateData = { targetChatId };
     await this.userRepository.save(user);
     await ctx.reply(
-      `Отвечаете пользователю (chatId: ${targetChatId}). Введите текст ответа:`,
+      `Отвечаете пользователю (chatId: ${targetChatId}). Отправьте текст ответа или фотографию с подписью — подпись станет текстом ответа.`,
     );
   }
 
-  async handleReplyPhoto(ctx: Context, user: User, fileId: string) {
-    const targetChatId = user.stateData.targetChatId;
-    const replyText = user.stateData.replyText;
+  async handleReplyPhoto(
+    ctx: Context,
+    user: User,
+    fileId: string,
+    replyTextOverride?: string,
+  ) {
+    const targetChatId = user.stateData?.targetChatId;
+    const replyText =
+      replyTextOverride ??
+      (user.stateData && (user.stateData as any).replyText) ??
+      '';
 
     try {
+      if (!targetChatId) {
+        await ctx.reply('Ошибка: не найден получатель для ответа.');
+        return;
+      }
+
       const replyKeyboard = Markup.inlineKeyboard([
         [Markup.button.callback('💬 Ответить', 'user_reply_to_admin')],
       ]);
 
       await ctx.telegram.sendPhoto(targetChatId, fileId, {
-        caption: '📩 Ответ от поддержки:\n' + replyText,
+        caption:
+          '📩 Ответ от поддержки:\n' +
+          (replyText && replyText.trim().length > 0
+            ? replyText
+            : '[без текста]'),
         ...replyKeyboard,
       });
 
@@ -380,7 +397,8 @@ export class SupportService {
 
       if (request) {
         request.messages.push({
-          message: replyText,
+          message:
+            replyText && replyText.trim().length > 0 ? replyText : '[ФОТО]',
           createdAt: new Date().toISOString(),
           isAdmin: true,
           mediaType: 'photo',
