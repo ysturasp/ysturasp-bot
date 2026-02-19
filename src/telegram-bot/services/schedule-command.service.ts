@@ -337,9 +337,15 @@ export class ScheduleCommandService {
   ): Promise<void> {
     await ctx.answerCbQuery();
 
+    const user = await this.userHelperService.getUser(ctx);
     const schedule = await this.scheduleService.getSchedule(groupName);
-    const message = formatSchedule(
+    const filteredSchedule = await this.applySubjectExclusionsForUser(
+      user.id,
+      groupName,
       schedule,
+    );
+    const message = formatSchedule(
+      filteredSchedule,
       dayOffset,
       groupName,
       0,
@@ -370,9 +376,15 @@ export class ScheduleCommandService {
   ): Promise<void> {
     await ctx.answerCbQuery();
 
+    const user = await this.userHelperService.getUser(ctx);
     const schedule = await this.scheduleService.getSchedule(groupName);
-    const message = formatSchedule(
+    const filteredSchedule = await this.applySubjectExclusionsForUser(
+      user.id,
+      groupName,
       schedule,
+    );
+    const message = formatSchedule(
+      filteredSchedule,
       'week',
       groupName,
       weekOffset,
@@ -486,10 +498,15 @@ export class ScheduleCommandService {
     }
 
     const schedule = await this.scheduleService.getSchedule(groupName);
+    const filteredSchedule = await this.applySubjectExclusionsForUser(
+      userId,
+      groupName,
+      schedule,
+    );
 
     if (dayOffset === 'week') {
       const message = formatSchedule(
-        schedule,
+        filteredSchedule,
         'week',
         groupName,
         weekOffset,
@@ -532,7 +549,7 @@ export class ScheduleCommandService {
     }
 
     const message = formatSchedule(
-      schedule,
+      filteredSchedule,
       dayOffset,
       groupName,
       0,
@@ -1067,5 +1084,111 @@ export class ScheduleCommandService {
     audienceId: string,
   ): Promise<void> {
     await this.handleQuickSelectAudience(ctx, audienceId);
+  }
+
+  private normalizeComparable(input?: string): string {
+    return String(input || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  private normalizeGroupKey(input?: string): string {
+    return String(input || '')
+      .trim()
+      .replace(/\s+/g, '')
+      .toUpperCase();
+  }
+
+  private parseExclusionArray(raw: any): any[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  private lessonMatchesExclusion(lesson: any, exclusion: any): boolean {
+    if (!lesson || !exclusion) return false;
+
+    if (typeof exclusion === 'string') {
+      const exLessonNameStr = this.normalizeComparable(exclusion);
+      if (!exLessonNameStr) return false;
+      return this.normalizeComparable(lesson.lessonName) === exLessonNameStr;
+    }
+
+    const exLessonName = this.normalizeComparable(exclusion.lessonName);
+    const exTeacher = this.normalizeComparable(
+      exclusion.teacher ?? exclusion.teacherName,
+    );
+    const exType =
+      exclusion.type === 0 || exclusion.type
+        ? Number(exclusion.type)
+        : undefined;
+
+    if (
+      exLessonName &&
+      this.normalizeComparable(lesson.lessonName) !== exLessonName
+    )
+      return false;
+    if (exTeacher && this.normalizeComparable(lesson.teacherName) !== exTeacher)
+      return false;
+    if (typeof exType === 'number' && Number(lesson.type) !== exType)
+      return false;
+
+    return Boolean(exLessonName || exTeacher || typeof exType === 'number');
+  }
+
+  private filterScheduleLessons(schedule: any, exclusions: any[]): any {
+    if (!schedule || !schedule.items || !Array.isArray(schedule.items))
+      return schedule;
+    if (!exclusions || exclusions.length === 0) return schedule;
+
+    return {
+      ...schedule,
+      items: schedule.items.map((week: any) => ({
+        ...week,
+        days: (week.days || []).map((day: any) => ({
+          ...day,
+          lessons: (day.lessons || []).filter(
+            (lesson: any) =>
+              !exclusions.some((ex) => this.lessonMatchesExclusion(lesson, ex)),
+          ),
+        })),
+      })),
+    };
+  }
+
+  private async applySubjectExclusionsForUser(
+    userId: string,
+    groupName: string,
+    schedule: any,
+  ): Promise<any> {
+    try {
+      const subs = await this.subscriptionRepository.find({
+        where: { user: { id: userId } as any },
+        order: { id: 'DESC' },
+      });
+      const targetKey = this.normalizeGroupKey(groupName);
+      const sub =
+        subs.find((s) => this.normalizeGroupKey(s.groupName) === targetKey) ||
+        null;
+      if (!sub) return schedule;
+
+      const hidden = this.parseExclusionArray((sub as any).hiddenSubjects);
+      const manual = this.parseExclusionArray(
+        (sub as any).manuallyExcludedSubjects,
+      );
+      const exclusions = [...hidden, ...manual];
+      return this.filterScheduleLessons(schedule, exclusions);
+    } catch {
+      return schedule;
+    }
   }
 }
