@@ -296,7 +296,7 @@ export class ScheduleService {
         ),
       );
 
-      const ttl = this.configService.get<number>('CACHE_TTL', 1200);
+      const ttl = this.configService.get<number>('CACHE_TTL', 604800);
       await this.redis.set(cacheKey, JSON.stringify(data), 'EX', ttl);
       return data;
     } catch (error) {
@@ -322,7 +322,7 @@ export class ScheduleService {
         ),
       );
 
-      const ttl = this.configService.get<number>('CACHE_TTL', 1200);
+      const ttl = this.configService.get<number>('CACHE_TTL', 604800);
       await this.redis.set(cacheKey, JSON.stringify(data), 'EX', ttl);
       return data;
     } catch (error) {
