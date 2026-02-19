@@ -34,6 +34,71 @@ export class NotificationsService {
     return groupName.trim().toUpperCase();
   }
 
+  private normalizeComparable(input?: string): string {
+    return String(input || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  private parseExclusionArray(raw: any): any[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  private lessonMatchesExclusion(lesson: any, exclusion: any): boolean {
+    if (!lesson || !exclusion) return false;
+
+    if (typeof exclusion === 'string') {
+      const exLessonNameStr = this.normalizeComparable(exclusion);
+      if (!exLessonNameStr) return false;
+      return this.normalizeComparable(lesson.lessonName) === exLessonNameStr;
+    }
+
+    const exLessonName = this.normalizeComparable(exclusion.lessonName);
+    const exTeacher = this.normalizeComparable(
+      exclusion.teacher ?? exclusion.teacherName,
+    );
+    const exType =
+      exclusion.type === 0 || exclusion.type
+        ? Number(exclusion.type)
+        : undefined;
+
+    if (
+      exLessonName &&
+      this.normalizeComparable(lesson.lessonName) !== exLessonName
+    )
+      return false;
+    if (exTeacher && this.normalizeComparable(lesson.teacherName) !== exTeacher)
+      return false;
+    if (typeof exType === 'number' && Number(lesson.type) !== exType)
+      return false;
+
+    return Boolean(exLessonName || exTeacher || typeof exType === 'number');
+  }
+
+  private shouldSkipLessonForSubscription(
+    sub: Subscription,
+    lesson: any,
+  ): boolean {
+    const hidden = this.parseExclusionArray((sub as any).hiddenSubjects);
+    const manual = this.parseExclusionArray(
+      (sub as any).manuallyExcludedSubjects,
+    );
+    const exclusions = [...hidden, ...manual];
+    if (exclusions.length === 0) return false;
+    return exclusions.some((ex) => this.lessonMatchesExclusion(lesson, ex));
+  }
+
   private isRunning = false;
 
   @Cron('0 * * * * *')
@@ -121,6 +186,9 @@ export class NotificationsService {
       const diffMinutes = Math.round(diffMs / 60000);
 
       for (const sub of groupSubs) {
+        if (this.shouldSkipLessonForSubscription(sub, lesson)) {
+          continue;
+        }
         if (
           diffMinutes <= sub.notifyMinutes &&
           diffMinutes > sub.notifyMinutes - 2
