@@ -10,12 +10,14 @@ export class TelegrafExceptionFilter implements ExceptionFilter {
     const telegrafHost = TelegrafArgumentsHost.create(host);
     const ctx = telegrafHost.getContext<Context>();
 
-    const updateType = ctx.updateType;
-    const update = ctx.update as any;
+    const updateType = ctx?.updateType;
+    const update = (ctx?.update || {}) as any;
 
     let userContext = 'Unknown User';
-    if (ctx.from) {
-      userContext = `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''} (@${ctx.from.username || 'no_user'}, id: ${ctx.from.id})`;
+    if (ctx?.from) {
+      userContext = `${ctx.from.first_name}${
+        ctx.from.last_name ? ' ' + ctx.from.last_name : ''
+      } (@${ctx.from.username || 'no_user'}, id: ${ctx.from.id})`;
     }
 
     let messageContext = '';
