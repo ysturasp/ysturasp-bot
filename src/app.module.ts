@@ -28,6 +28,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { RedisModule } from './redis/redis.module';
 import { LoggerModule } from './logger/logger.module';
 import { AiModule } from './ai/ai.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -94,7 +95,7 @@ import { AiModule } from './ai/ai.module';
     LoggerModule,
     AiModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [AppService],
 })
 export class AppModule {}
