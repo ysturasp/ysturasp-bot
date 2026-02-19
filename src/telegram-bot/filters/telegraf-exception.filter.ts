@@ -10,8 +10,12 @@ export class TelegrafExceptionFilter implements ExceptionFilter {
     const telegrafHost = TelegrafArgumentsHost.create(host);
     const ctx = telegrafHost.getContext<Context>();
 
-    const updateType = ctx?.updateType;
-    const update = (ctx?.update || {}) as any;
+    if (!ctx || !(ctx as any).update) {
+      return;
+    }
+
+    const updateType = ctx.updateType;
+    const update = ctx.update as any;
 
     let userContext = 'Unknown User';
     if (ctx?.from) {
