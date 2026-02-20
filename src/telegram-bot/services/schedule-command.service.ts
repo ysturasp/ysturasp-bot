@@ -51,6 +51,29 @@ export class ScheduleCommandService {
     });
   }
 
+  private async safeEditMessageText(
+    ctx: Context,
+    text: string,
+    extra?: any,
+  ): Promise<any> {
+    try {
+      return await ctx.editMessageText(text, extra);
+    } catch (error: any) {
+      const errorMessage =
+        error?.message || error?.response?.description || String(error || '');
+      const errorCode = error?.response?.error_code || error?.code;
+
+      if (
+        (errorCode === 400 || errorMessage.includes('400')) &&
+        errorMessage.includes('message is not modified')
+      ) {
+        this.logger.debug('Message content unchanged, skipping edit');
+        return;
+      }
+      throw error;
+    }
+  }
+
   async handleExams(
     ctx: Context,
     userId: string,
@@ -160,7 +183,7 @@ export class ScheduleCommandService {
       const message = 'Экзамены для ваших групп не найдены.';
       // @ts-ignore
       if (ctx.callbackQuery) {
-        await ctx.editMessageText(message, keyboard);
+        await this.safeEditMessageText(ctx, message, keyboard);
       } else {
         await this.replyWithFooter(ctx, message, keyboard);
       }
@@ -248,11 +271,15 @@ export class ScheduleCommandService {
 
     // @ts-ignore
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(this.addFooterLinks(msg.trim(), 'HTML'), {
-        parse_mode: 'HTML',
-        link_preview_options: { is_disabled: true },
-        ...keyboard,
-      });
+      await this.safeEditMessageText(
+        ctx,
+        this.addFooterLinks(msg.trim(), 'HTML'),
+        {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        },
+      );
     } else {
       await this.replyWithFooter(ctx, msg.trim(), {
         parse_mode: 'HTML',
@@ -322,7 +349,8 @@ export class ScheduleCommandService {
       [Markup.button.callback('« Назад', `back_to_group:${groupName}`)],
     ]);
 
-    await ctx.editMessageText(
+    await this.safeEditMessageText(
+      ctx,
       `📋 Расписание для группы ${groupName}:`,
       keyboard,
     );
@@ -356,7 +384,7 @@ export class ScheduleCommandService {
       [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
-    await ctx.editMessageText(this.addFooterLinks(message), {
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
       parse_mode: 'Markdown',
       ...keyboard,
     });
@@ -406,7 +434,7 @@ export class ScheduleCommandService {
       [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
-    await ctx.editMessageText(this.addFooterLinks(message, 'HTML'), {
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       ...keyboard,
@@ -447,7 +475,8 @@ export class ScheduleCommandService {
       ],
     ]);
 
-    await ctx.editMessageText(
+    await this.safeEditMessageText(
+      ctx,
       `✅ Нашёл группу <b>${escapeHtml(groupName)}</b>!\n\nЧто вы хотите сделать?`,
       { parse_mode: 'HTML', ...keyboard },
     );
@@ -528,11 +557,15 @@ export class ScheduleCommandService {
       ]);
       // @ts-ignore
       if (ctx.callbackQuery) {
-        await ctx.editMessageText(this.addFooterLinks(message, 'HTML'), {
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          ...keyboard,
-        });
+        await this.safeEditMessageText(
+          ctx,
+          this.addFooterLinks(message, 'HTML'),
+          {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+            ...keyboard,
+          },
+        );
       } else {
         await this.replyWithFooter(ctx, message, keyboard);
       }
@@ -560,7 +593,7 @@ export class ScheduleCommandService {
     ]);
     // @ts-ignore
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(this.addFooterLinks(message), {
+      await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
         parse_mode: 'Markdown',
         link_preview_options: { is_disabled: true },
         ...keyboard,
@@ -608,7 +641,7 @@ export class ScheduleCommandService {
     const teachers = await this.scheduleService.getTeachers();
     const teacher = teachers.find((t) => t.id === teacherId);
     if (!teacher) {
-      await ctx.editMessageText('❌ Преподаватель не найден.');
+      await this.safeEditMessageText(ctx, '❌ Преподаватель не найден.');
       return;
     }
 
@@ -645,7 +678,8 @@ export class ScheduleCommandService {
 
     const keyboard = Markup.inlineKeyboard(rows);
 
-    await ctx.editMessageText(
+    await this.safeEditMessageText(
+      ctx,
       `👨‍🏫 Выбрано: <b>${escapeHtml(teacher.name)}</b>\nПоказать расписание?`,
       { parse_mode: 'HTML', ...keyboard },
     );
@@ -666,7 +700,7 @@ export class ScheduleCommandService {
 
     if (matchingTeachers.length === 0) {
       const msg = '❌ Преподаватели не найдены.';
-      if (isCallback) await ctx.editMessageText(msg);
+      if (isCallback) await this.safeEditMessageText(ctx, msg);
       else await this.replyWithFooter(ctx, msg);
       return;
     }
@@ -727,7 +761,7 @@ export class ScheduleCommandService {
     const message = `❓ Нашёл несколько преподавателей со схожей <b>${promptType}</b>. Пожалуйста, выберите нужного${paginationText}:`;
 
     if (isCallback) {
-      await ctx.editMessageText(message, {
+      await this.safeEditMessageText(ctx, message, {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard(buttons),
       });
@@ -748,7 +782,10 @@ export class ScheduleCommandService {
     await ctx.answerCbQuery();
     const schedule = await this.scheduleService.getTeacherSchedule(teacherId);
     if (!schedule) {
-      await ctx.editMessageText('❌ Расписание преподавателя не найдено.');
+      await this.safeEditMessageText(
+        ctx,
+        '❌ Расписание преподавателя не найдено.',
+      );
       return;
     }
 
@@ -778,7 +815,7 @@ export class ScheduleCommandService {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(this.addFooterLinks(message), {
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
       parse_mode: 'Markdown',
       link_preview_options: { is_disabled: true },
       ...keyboard,
@@ -794,7 +831,10 @@ export class ScheduleCommandService {
     await ctx.answerCbQuery();
     const schedule = await this.scheduleService.getTeacherSchedule(teacherId);
     if (!schedule) {
-      await ctx.editMessageText('❌ Расписание преподавателя не найдено.');
+      await this.safeEditMessageText(
+        ctx,
+        '❌ Расписание преподавателя не найдено.',
+      );
       return;
     }
 
@@ -835,7 +875,7 @@ export class ScheduleCommandService {
       ],
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(this.addFooterLinks(message), {
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
       parse_mode: 'Markdown',
       link_preview_options: { is_disabled: true },
       ...keyboard,
@@ -851,7 +891,10 @@ export class ScheduleCommandService {
     await ctx.answerCbQuery();
     const schedule = await this.scheduleService.getAudienceSchedule(audienceId);
     if (!schedule) {
-      await ctx.editMessageText('❌ Расписание аудитории не найдено.');
+      await this.safeEditMessageText(
+        ctx,
+        '❌ Расписание аудитории не найдено.',
+      );
       return;
     }
 
@@ -881,7 +924,7 @@ export class ScheduleCommandService {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(this.addFooterLinks(message), {
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
       parse_mode: 'Markdown',
       link_preview_options: { is_disabled: true },
       ...keyboard,
@@ -897,7 +940,10 @@ export class ScheduleCommandService {
     await ctx.answerCbQuery();
     const schedule = await this.scheduleService.getAudienceSchedule(audienceId);
     if (!schedule) {
-      await ctx.editMessageText('❌ Расписание аудитории не найдено.');
+      await this.safeEditMessageText(
+        ctx,
+        '❌ Расписание аудитории не найдено.',
+      );
       return;
     }
 
@@ -938,7 +984,7 @@ export class ScheduleCommandService {
       ],
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await ctx.editMessageText(this.addFooterLinks(message), {
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
       parse_mode: 'Markdown',
       link_preview_options: { is_disabled: true },
       ...keyboard,
@@ -954,7 +1000,7 @@ export class ScheduleCommandService {
     const audiences = await this.scheduleService.getAudiences();
     const audience = audiences.find((a) => String(a.id) === String(audienceId));
     if (!audience) {
-      await ctx.editMessageText('❌ Аудитория не найденa.');
+      await this.safeEditMessageText(ctx, '❌ Аудитория не найденa.');
       return;
     }
 
@@ -991,7 +1037,8 @@ export class ScheduleCommandService {
 
     const keyboard = Markup.inlineKeyboard(rows);
 
-    await ctx.editMessageText(
+    await this.safeEditMessageText(
+      ctx,
       `🏛 Выбрано: <b>${audience.name}</b>\nПоказать расписание?`,
       { parse_mode: 'HTML', ...keyboard },
     );
@@ -1014,7 +1061,7 @@ export class ScheduleCommandService {
 
     if (matchingAudiences.length === 0) {
       const msg = '❌ Аудитории не найдены.';
-      if (isCallback) await ctx.editMessageText(msg);
+      if (isCallback) await this.safeEditMessageText(ctx, msg);
       else await this.replyWithFooter(ctx, msg);
       return;
     }
@@ -1067,7 +1114,7 @@ export class ScheduleCommandService {
     const message = `❓ Нашёл несколько аудиторий по <b>${promptType}</b>. Пожалуйста, выберите нужную${paginationText}:`;
 
     if (isCallback) {
-      await ctx.editMessageText(message, {
+      await this.safeEditMessageText(ctx, message, {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard(buttons),
       });
