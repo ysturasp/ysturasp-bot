@@ -17,7 +17,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "cache:schedule": "ts-node -r tsconfig-paths/register src/scripts/cache-schedule.ts",
+    "cache:schedule:all": "ts-node -r tsconfig-paths/register src/scripts/cache-schedule.ts all",
+    "cache:schedule:groups": "ts-node -r tsconfig-paths/register src/scripts/cache-schedule.ts groups",
+    "cache:schedule:teachers": "ts-node -r tsconfig-paths/register src/scripts/cache-schedule.ts teachers",
+    "cache:schedule:audiences": "ts-node -r tsconfig-paths/register src/scripts/cache-schedule.ts audiences"
   },
   "dependencies": {
     "@a2seven/yoo-checkout": "^1.1.4",
