@@ -298,7 +298,10 @@ export class TelegramBotService {
           Markup.button.callback('🛠️ Создать опрос', 'open_createpoll'),
           Markup.button.callback('📢 Рассылка', 'open_broadcast'),
         ],
-        [Markup.button.callback('📊 Аналитика', 'open_analytics')],
+        [
+          Markup.button.callback('📊 Аналитика', 'open_analytics'),
+          Markup.button.callback('🤖 Статистика ИИ', 'ai_stats'),
+        ],
       );
     }
 
@@ -425,6 +428,12 @@ export class TelegramBotService {
   async onAiCheckKeysAction(@Ctx() ctx: Context) {
     await ctx.answerCbQuery();
     await this.onAiCheckKeys(ctx);
+  }
+
+  @Action('ai_stats')
+  async onAiStatsAction(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    await this.onAiStats(ctx);
   }
 
   @Command('profile')
