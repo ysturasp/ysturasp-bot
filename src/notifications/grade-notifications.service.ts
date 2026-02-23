@@ -381,7 +381,6 @@ export class GradeNotificationsService {
     return (
       month === 12 ||
       month === 1 ||
-      month === 2 ||
       month === 5 ||
       month === 6 ||
       month === 7
