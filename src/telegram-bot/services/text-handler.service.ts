@@ -11,6 +11,7 @@ import { GroqService } from '../../ai/groq.service';
 import { AiLimitService } from '../../ai/ai-limit.service';
 import {
   findCanonicalGroupName,
+  normalizeGroupKey,
   normalizeAudienceName,
 } from '../../helpers/group-normalizer';
 import { getMainKeyboard } from '../helpers/keyboard.helper';
@@ -92,6 +93,18 @@ export class TextHandlerService {
     }
 
     const lowerText = text.toLowerCase().trim();
+    const multiWeekCount = this.parseMultiWeekCountRequest(text);
+    if (multiWeekCount && multiWeekCount >= 2) {
+      await ctx.reply(
+        `⚠️ Расписание сразу на ${multiWeekCount} недели может быть слишком большим.\n\nОткрою просмотр по неделям — листайте кнопками «Следующая 👉».`,
+      );
+      await this.scheduleCommandService.handleScheduleRequest(
+        ctx,
+        user.id,
+        'week',
+      );
+      return true;
+    }
     if (
       text === '📅 Сегодня' ||
       text === '/today' ||
@@ -685,6 +698,53 @@ export class TextHandlerService {
       return true;
     }
 
+    const groupish =
+      !!extractedGroup ||
+      this.looksLikeGroupQuery(possibleGroup) ||
+      this.looksLikeGroupQuery(originalText);
+    if (groupish) {
+      const raw = extractedGroup || this.extractFirstGroupToken(originalText);
+      const shown = raw || possibleGroup || originalText;
+      const suggestions = this.getGroupSuggestions(shown, groups, 6);
+
+      if (suggestions.length > 0) {
+        const rows: any[] = [];
+        for (let i = 0; i < suggestions.length; i += 2) {
+          const row = suggestions
+            .slice(i, i + 2)
+            .map((g) => Markup.button.callback(g, `quick_view:${g}`));
+          rows.push(row);
+        }
+        rows.push([
+          Markup.button.callback(
+            '📌 Выбрать группу вручную',
+            'open_select_group:main',
+          ),
+        ]);
+        const keyboard = Markup.inlineKeyboard(rows);
+
+        await ctx.reply(
+          `❌ Группа <b>${shown.toUpperCase()}</b> не найдена.\n\nВозможно, вы имели в виду:`,
+          { parse_mode: 'HTML', ...keyboard },
+        );
+        return true;
+      }
+
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            '📌 Выбрать группу вручную',
+            'open_select_group:main',
+          ),
+        ],
+      ]);
+      await ctx.reply(
+        `❌ Группа <b>${shown.toUpperCase()}</b> не найдена.\n\nПроверьте название или выберите группу вручную.`,
+        { parse_mode: 'HTML', ...keyboard },
+      );
+      return true;
+    }
+
     const audiences = await this.scheduleService.getAudiences();
     const cleanText = normalizeAudienceName(text);
     const matchingAudiences = audiences.filter((a) => {
@@ -863,6 +923,10 @@ export class TextHandlerService {
 
       /(?:на\s+(?:сегодня|завтра|неделю|следующую\s+неделю|эту\s+неделю|понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье))\s+([а-яёА-ЯЁa-zA-Z]{1,5}[-\s]?\d{1,2}[а-яёА-ЯЁa-zA-Z]?)/iu,
 
+      /^([а-яёА-ЯЁa-zA-Z]{1,8}[-\s]?\d{1,2}[а-яёА-ЯЁa-zA-Z]?)\s+(?:неделя|сегодня|завтра|понедельник|вторник|среда|четверг|пятница|суббота|воскресенье)\b/iu,
+
+      /^(?:неделя|сегодня|завтра|понедельник|вторник|среда|четверг|пятница|суббота|воскресенье)\s+([а-яёА-ЯЁa-zA-Z]{1,8}[-\s]?\d{1,2}[а-яёА-ЯЁa-zA-Z]?)/iu,
+
       /^([а-яёА-ЯЁa-zA-Z]{1,5})[-\s]+(\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
 
       /^([а-яёА-ЯЁa-zA-Z]{1,5})(\d{1,2}[а-яёА-ЯЁa-zA-Z]?)$/iu,
@@ -892,6 +956,96 @@ export class TextHandlerService {
     }
 
     return null;
+  }
+
+  private parseMultiWeekCountRequest(text: string): number | null {
+    const normalized = String(text || '')
+      .toLowerCase()
+      .replace(
+        /^(?:расписание|распис|раписание|расписаие|распесание|рапсписание|рачписание|рачсписание|расрисание)\s+(?:на\s+)?/iu,
+        '',
+      )
+      .trim()
+      .replace(/\s+/g, ' ');
+
+    const m = normalized.match(/^(\d{1,2})\s*недел(?:я|и|ь|ю)\b/u);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  }
+
+  private looksLikeGroupQuery(text: string): boolean {
+    const t = String(text || '').trim();
+    if (!t) return false;
+    return /^(?:[а-яёa-z]{1,8})[-\s]?\d{1,2}[а-яёa-z]?$/iu.test(t);
+  }
+
+  private extractFirstGroupToken(text: string): string | null {
+    const t = String(text || '').trim();
+    if (!t) return null;
+    const m = t.match(/([а-яёA-ЯЁa-zA-Z]{1,8}[-\s]?\d{1,2}[а-яёA-ЯЁa-zA-Z]?)/u);
+    if (!m) return null;
+    const token = m[1].replace(/\s+/g, '-').toUpperCase();
+    if (!this.looksLikeGroupQuery(token)) return null;
+    return token;
+  }
+
+  private levenshtein(a: string, b: string): number {
+    if (a === b) return 0;
+    if (!a) return b.length;
+    if (!b) return a.length;
+
+    const alen = a.length;
+    const blen = b.length;
+
+    const prev = new Array<number>(blen + 1);
+    const curr = new Array<number>(blen + 1);
+    for (let j = 0; j <= blen; j++) prev[j] = j;
+
+    for (let i = 1; i <= alen; i++) {
+      curr[0] = i;
+      const ac = a.charCodeAt(i - 1);
+      for (let j = 1; j <= blen; j++) {
+        const cost = ac === b.charCodeAt(j - 1) ? 0 : 1;
+        curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+      }
+      for (let j = 0; j <= blen; j++) prev[j] = curr[j];
+    }
+
+    return prev[blen];
+  }
+
+  private getGroupSuggestions(
+    input: string,
+    groups: string[] | null | undefined,
+    limit = 6,
+  ): string[] {
+    if (!groups || groups.length === 0) return [];
+
+    const inputKey = normalizeGroupKey(String(input || ''));
+    if (!inputKey) return [];
+
+    const digits = inputKey.match(/\d{1,2}/)?.[0] || '';
+    const scored = groups.map((g) => {
+      const name = String(g).trim();
+      const key = normalizeGroupKey(name);
+      const d = this.levenshtein(inputKey, key);
+      const digitBonus = digits && key.includes(digits) ? -1 : 0;
+      const score = d + digitBonus;
+      return { name, score };
+    });
+
+    scored.sort((x, y) => x.score - y.score || x.name.length - y.name.length);
+    const topScore = scored[0]?.score ?? 999;
+
+    const picked: string[] = [];
+    for (const s of scored) {
+      if (picked.length >= limit) break;
+      if (s.score > Math.min(6, topScore + 2)) break;
+      if (!picked.includes(s.name)) picked.push(s.name);
+    }
+    return picked;
   }
 
   private calculateWeekOffset(targetDate: Date): number {

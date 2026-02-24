@@ -379,11 +379,7 @@ export class GradeNotificationsService {
     const month = now.getMonth() + 1;
 
     return (
-      month === 12 ||
-      month === 1 ||
-      month === 5 ||
-      month === 6 ||
-      month === 7
+      month === 12 || month === 1 || month === 5 || month === 6 || month === 7
     );
   }
 
