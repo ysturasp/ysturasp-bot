@@ -71,7 +71,7 @@ export function formatSchedule(
   groupName: string,
   weekOffset = 0,
   type: 'student' | 'teacher' | 'audience' = 'student',
-  parseMode: 'HTML' | 'Markdown' = 'Markdown',
+  parseMode: 'HTML' | 'Markdown' = 'HTML',
 ): string {
   if (!schedule || !schedule.items) {
     return '❌ Расписание не найдено.';
@@ -104,7 +104,7 @@ function formatDaySchedule(
   targetDate: Date,
   groupName: string,
   type: 'student' | 'teacher' | 'audience' = 'student',
-  parseMode: 'HTML' | 'Markdown' = 'Markdown',
+  parseMode: 'HTML' | 'Markdown' = 'HTML',
 ): string {
   targetDate.setHours(0, 0, 0, 0);
 
@@ -180,7 +180,7 @@ function formatWeekSchedule(
   groupName: string,
   weekOffset: number,
   type: 'student' | 'teacher' | 'audience' = 'student',
-  parseMode: 'HTML' | 'Markdown' = 'Markdown',
+  parseMode: 'HTML' | 'Markdown' = 'HTML',
 ): string {
   const escape = parseMode === 'HTML' ? escapeHtml : escapeMarkdown;
   const today = toMoscowStartOfDay(new Date());

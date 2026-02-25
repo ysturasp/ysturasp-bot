@@ -32,7 +32,7 @@ export class ScheduleCommandService {
 
   private addFooterLinks(
     message: string,
-    parseMode: 'Markdown' | 'HTML' = 'Markdown',
+    parseMode: 'Markdown' | 'HTML' = 'HTML',
   ): string {
     return message + getFooterLinks(parseMode);
   }
@@ -42,7 +42,7 @@ export class ScheduleCommandService {
     message: string,
     extra?: any,
   ): Promise<any> {
-    const parseMode = extra?.parse_mode || 'Markdown';
+    const parseMode = extra?.parse_mode || 'HTML';
     const messageWithFooter = this.addFooterLinks(message, parseMode);
     return ctx.reply(messageWithFooter, {
       parse_mode: parseMode,
@@ -378,14 +378,15 @@ export class ScheduleCommandService {
       groupName,
       0,
       'student',
+      'HTML',
     );
 
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', `quick_view:${groupName}`)],
     ]);
 
-    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
-      parse_mode: 'Markdown',
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
+      parse_mode: 'HTML',
       ...keyboard,
     });
 
@@ -587,19 +588,23 @@ export class ScheduleCommandService {
       groupName,
       0,
       'student',
+      'HTML',
     );
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', 'back_to_schedule_menu')],
     ]);
     // @ts-ignore
     if (ctx.callbackQuery) {
-      await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
-        parse_mode: 'Markdown',
+      await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
+        parse_mode: 'HTML',
         link_preview_options: { is_disabled: true },
         ...keyboard,
       });
     } else {
-      await this.replyWithFooter(ctx, message, keyboard);
+      await this.replyWithFooter(ctx, message, {
+        parse_mode: 'HTML',
+        ...keyboard,
+      });
     }
     const viewType =
       dayOffset === 0 ? 'today' : dayOffset === 1 ? 'tomorrow' : 'day';
@@ -806,7 +811,7 @@ export class ScheduleCommandService {
       '',
       0,
       'teacher',
-      'Markdown',
+      'HTML',
     );
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
@@ -815,8 +820,8 @@ export class ScheduleCommandService {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
-      parse_mode: 'Markdown',
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
+      parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       ...keyboard,
     });
@@ -855,7 +860,7 @@ export class ScheduleCommandService {
       '',
       weekOffset,
       'teacher',
-      'Markdown',
+      'HTML',
     );
     const backAction = query
       ? `quick_select_teacher:${teacherId}:${query}`
@@ -875,8 +880,8 @@ export class ScheduleCommandService {
       ],
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
-      parse_mode: 'Markdown',
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
+      parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       ...keyboard,
     });
@@ -915,7 +920,7 @@ export class ScheduleCommandService {
       '',
       0,
       'audience',
-      'Markdown',
+      'HTML',
     );
     const backAction = query
       ? `quick_select_audience:${audienceId}:${query}`
@@ -924,8 +929,8 @@ export class ScheduleCommandService {
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
-      parse_mode: 'Markdown',
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
+      parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       ...keyboard,
     });
@@ -964,7 +969,7 @@ export class ScheduleCommandService {
       '',
       weekOffset,
       'audience',
-      'Markdown',
+      'HTML',
     );
     const backAction = query
       ? `quick_select_audience:${audienceId}:${query}`
@@ -984,8 +989,8 @@ export class ScheduleCommandService {
       ],
       [Markup.button.callback('« Назад', backAction)],
     ]);
-    await this.safeEditMessageText(ctx, this.addFooterLinks(message), {
-      parse_mode: 'Markdown',
+    await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
+      parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       ...keyboard,
     });
