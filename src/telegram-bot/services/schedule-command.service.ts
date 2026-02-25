@@ -595,11 +595,15 @@ export class ScheduleCommandService {
     ]);
     // @ts-ignore
     if (ctx.callbackQuery) {
-      await this.safeEditMessageText(ctx, this.addFooterLinks(message, 'HTML'), {
-        parse_mode: 'HTML',
-        link_preview_options: { is_disabled: true },
-        ...keyboard,
-      });
+      await this.safeEditMessageText(
+        ctx,
+        this.addFooterLinks(message, 'HTML'),
+        {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          ...keyboard,
+        },
+      );
     } else {
       await this.replyWithFooter(ctx, message, {
         parse_mode: 'HTML',
