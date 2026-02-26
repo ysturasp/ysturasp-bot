@@ -11,7 +11,10 @@ import { ConfigService } from '@nestjs/config';
 import { getMainKeyboard } from './helpers/keyboard.helper';
 import { SupportService } from './services/support.service';
 import { PollService } from './services/poll.service';
-import { BroadcastService } from './services/broadcast.service';
+import {
+  BroadcastService,
+  parseBroadcastExclude,
+} from './services/broadcast.service';
 import { SubscriptionService } from './services/subscription.service';
 import { ScheduleCommandService } from './services/schedule-command.service';
 import { UserHelperService } from './services/user-helper.service';
@@ -1341,16 +1344,16 @@ export class TelegramBotService {
     if (isCallback2) {
       try {
         await ctx.editMessageText(
-          'Отправьте текст для рассылки или пришлите фото/видео с подписью. После отправки рассылка будет выполнена.',
-          kb2 as any,
+          'Отправьте текст для рассылки или фото/видео с подписью.\n\nЧтобы исключить пользователей, первой строкой напишите:\n<code>!except user1, 123456</code>\n(далее — текст рассылки). Указать можно @username или chat id. Без этой строки рассылка пойдёт всем.',
+          { ...(kb2 as any), parse_mode: 'HTML' },
         );
         return;
       } catch (e) {}
     }
     await this.replyWithFooter(
       ctx,
-      'Отправьте текст для рассылки или пришлите фото/видео с подписью. После отправки рассылка будет выполнена.',
-      kb2 as any,
+      'Отправьте текст для рассылки или фото/видео с подписью.\n\nЧтобы исключить пользователей, первой строкой напишите:\n<code>!except user1, 123456</code>\n(далее — текст рассылки). Указать можно @username или chat id. Без этой строки рассылка пойдёт всем.',
+      { ...(kb2 as any), parse_mode: 'HTML' },
     );
   }
 
@@ -1677,26 +1680,48 @@ export class TelegramBotService {
 
     if (!broadcastText) {
       await ctx.reply(
-        'Использование:\n/broadcast текст_сообщения\n\nИли отправьте фото с подписью:\n/broadcast текст_сообщения',
+        'Использование:\n/broadcast текст_сообщения\n\nЧтобы исключить пользователей, первой строкой напишите:\n!except user1, 123456\n(далее — текст рассылки)\n\nИли отправьте фото с подписью.',
       );
       return;
     }
 
+    const parsed = parseBroadcastExclude(broadcastText);
+    if (parsed.excludeIdentifiers.length && !parsed.text.trim()) {
+      await ctx.reply(
+        'Укажите текст рассылки после строки с исключениями (вторая строка и далее).',
+      );
+      return;
+    }
     const startIndex = text.indexOf(broadcastText);
-    const entities =
-      startIndex >= 0 && msg.entities?.length
-        ? msg.entities
-            .map((e) => ({ ...e, offset: e.offset - startIndex }))
-            .filter(
-              (e) =>
-                e.offset >= 0 && e.offset + e.length <= broadcastText.length,
-            )
-        : undefined;
+    let entities: import('telegraf/types').MessageEntity[] | undefined;
+    if (startIndex >= 0 && msg.entities?.length) {
+      const rawEntities = msg.entities
+        .map((e) => ({ ...e, offset: e.offset - startIndex }))
+        .filter(
+          (e) => e.offset >= 0 && e.offset + e.length <= broadcastText.length,
+        );
+      if (parsed.entityOffsetShift > 0) {
+        entities = rawEntities
+          .filter(
+            (e) =>
+              e.offset >= parsed.entityOffsetShift &&
+              e.offset + e.length <=
+                parsed.entityOffsetShift + parsed.text.length,
+          )
+          .map((e) => ({
+            ...e,
+            offset: e.offset - parsed.entityOffsetShift,
+          }));
+      } else {
+        entities = rawEntities;
+      }
+    }
 
     await this.broadcastService.handleBroadcastCommand(
       ctx,
-      broadcastText,
+      parsed.text || broadcastText,
       entities,
+      parsed.excludeIdentifiers.length ? parsed.excludeIdentifiers : undefined,
     );
   }
 
@@ -2048,10 +2073,35 @@ export class TelegramBotService {
         text?: string;
         entities?: import('telegraf/types').MessageEntity[];
       };
+      const raw = text.trim();
+      const parsed = parseBroadcastExclude(raw);
+      if (parsed.excludeIdentifiers.length && !parsed.text.trim()) {
+        await ctx.reply(
+          'Укажите текст рассылки после строки с исключениями (вторая строка и далее).',
+        );
+        return;
+      }
+      let entities = msg.entities;
+      if (parsed.entityOffsetShift > 0 && entities?.length) {
+        entities = entities
+          .filter(
+            (e) =>
+              e.offset >= parsed.entityOffsetShift &&
+              e.offset + e.length <=
+                parsed.entityOffsetShift + parsed.text.length,
+          )
+          .map((e) => ({
+            ...e,
+            offset: e.offset - parsed.entityOffsetShift,
+          }));
+      }
       await this.broadcastService.handleBroadcastCommand(
         ctx,
-        text.trim(),
-        msg.entities,
+        parsed.text || raw,
+        entities,
+        parsed.excludeIdentifiers.length
+          ? parsed.excludeIdentifiers
+          : undefined,
       );
       user.state = null;
       user.stateData = null;
@@ -2188,11 +2238,29 @@ export class TelegramBotService {
           caption_entities?: import('telegraf/types').MessageEntity[];
         }
       ).caption_entities;
+      const parsed = parseBroadcastExclude(caption || '');
+      let entities = captionEntities;
+      if (parsed.entityOffsetShift > 0 && entities?.length) {
+        entities = entities
+          .filter(
+            (e) =>
+              e.offset >= parsed.entityOffsetShift &&
+              e.offset + e.length <=
+                parsed.entityOffsetShift + parsed.text.length,
+          )
+          .map((e) => ({
+            ...e,
+            offset: e.offset - parsed.entityOffsetShift,
+          }));
+      }
       await this.broadcastService.handleBroadcastPhoto(
         ctx,
         fileId,
-        caption,
-        captionEntities,
+        parsed.text || caption,
+        entities,
+        parsed.excludeIdentifiers.length
+          ? parsed.excludeIdentifiers
+          : undefined,
       );
       user.state = null;
       user.stateData = null;
@@ -2215,25 +2283,43 @@ export class TelegramBotService {
     if (user.isAdmin && message.caption?.startsWith('/broadcast')) {
       const fullCaption = message.caption;
       const broadcastCaption = fullCaption.replace('/broadcast', '').trim();
+      const parsed = parseBroadcastExclude(broadcastCaption);
       const startIdx = fullCaption.indexOf(broadcastCaption);
-      const captionEntities =
-        startIdx >= 0 && (message as any).caption_entities?.length
-          ? (message as any).caption_entities
-              .map((e: import('telegraf/types').MessageEntity) => ({
-                ...e,
-                offset: e.offset - startIdx,
-              }))
-              .filter(
-                (e: import('telegraf/types').MessageEntity) =>
-                  e.offset >= 0 &&
-                  e.offset + e.length <= broadcastCaption.length,
-              )
-          : undefined;
+      let captionEntities: import('telegraf/types').MessageEntity[] | undefined;
+      if (startIdx >= 0 && (message as any).caption_entities?.length) {
+        const raw = (message as any).caption_entities
+          .map((e: import('telegraf/types').MessageEntity) => ({
+            ...e,
+            offset: e.offset - startIdx,
+          }))
+          .filter(
+            (e: import('telegraf/types').MessageEntity) =>
+              e.offset >= 0 && e.offset + e.length <= broadcastCaption.length,
+          );
+        if (parsed.entityOffsetShift > 0) {
+          captionEntities = raw
+            .filter(
+              (e: import('telegraf/types').MessageEntity) =>
+                e.offset >= parsed.entityOffsetShift &&
+                e.offset + e.length <=
+                  parsed.entityOffsetShift + parsed.text.length,
+            )
+            .map((e: import('telegraf/types').MessageEntity) => ({
+              ...e,
+              offset: e.offset - parsed.entityOffsetShift,
+            }));
+        } else {
+          captionEntities = raw;
+        }
+      }
       await this.broadcastService.handleBroadcastPhoto(
         ctx,
         fileId,
-        broadcastCaption,
+        parsed.text || broadcastCaption,
         captionEntities,
+        parsed.excludeIdentifiers.length
+          ? parsed.excludeIdentifiers
+          : undefined,
       );
       return;
     }
@@ -2280,11 +2366,29 @@ export class TelegramBotService {
           caption_entities?: import('telegraf/types').MessageEntity[];
         }
       ).caption_entities;
+      const parsed = parseBroadcastExclude(caption || '');
+      let entities = captionEntities;
+      if (parsed.entityOffsetShift > 0 && entities?.length) {
+        entities = entities
+          .filter(
+            (e) =>
+              e.offset >= parsed.entityOffsetShift &&
+              e.offset + e.length <=
+                parsed.entityOffsetShift + parsed.text.length,
+          )
+          .map((e) => ({
+            ...e,
+            offset: e.offset - parsed.entityOffsetShift,
+          }));
+      }
       await this.broadcastService.handleBroadcastVideo(
         ctx,
         fileId,
-        caption,
-        captionEntities,
+        parsed.text || caption,
+        entities,
+        parsed.excludeIdentifiers.length
+          ? parsed.excludeIdentifiers
+          : undefined,
       );
       user.state = null;
       user.stateData = null;
@@ -2333,25 +2437,43 @@ export class TelegramBotService {
     if (user.isAdmin && message.caption?.startsWith('/broadcast')) {
       const fullCaption = message.caption;
       const broadcastCaption = fullCaption.replace('/broadcast', '').trim();
+      const parsed = parseBroadcastExclude(broadcastCaption);
       const startIdx = fullCaption.indexOf(broadcastCaption);
-      const captionEntities =
-        startIdx >= 0 && (message as any).caption_entities?.length
-          ? (message as any).caption_entities
-              .map((e: import('telegraf/types').MessageEntity) => ({
-                ...e,
-                offset: e.offset - startIdx,
-              }))
-              .filter(
-                (e: import('telegraf/types').MessageEntity) =>
-                  e.offset >= 0 &&
-                  e.offset + e.length <= broadcastCaption.length,
-              )
-          : undefined;
+      let captionEntities: import('telegraf/types').MessageEntity[] | undefined;
+      if (startIdx >= 0 && (message as any).caption_entities?.length) {
+        const raw = (message as any).caption_entities
+          .map((e: import('telegraf/types').MessageEntity) => ({
+            ...e,
+            offset: e.offset - startIdx,
+          }))
+          .filter(
+            (e: import('telegraf/types').MessageEntity) =>
+              e.offset >= 0 && e.offset + e.length <= broadcastCaption.length,
+          );
+        if (parsed.entityOffsetShift > 0) {
+          captionEntities = raw
+            .filter(
+              (e: import('telegraf/types').MessageEntity) =>
+                e.offset >= parsed.entityOffsetShift &&
+                e.offset + e.length <=
+                  parsed.entityOffsetShift + parsed.text.length,
+            )
+            .map((e: import('telegraf/types').MessageEntity) => ({
+              ...e,
+              offset: e.offset - parsed.entityOffsetShift,
+            }));
+        } else {
+          captionEntities = raw;
+        }
+      }
       await this.broadcastService.handleBroadcastVideo(
         ctx,
         fileId,
-        broadcastCaption,
+        parsed.text || broadcastCaption,
         captionEntities,
+        parsed.excludeIdentifiers.length
+          ? parsed.excludeIdentifiers
+          : undefined,
       );
       return;
     }
