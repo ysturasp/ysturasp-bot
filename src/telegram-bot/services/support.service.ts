@@ -63,7 +63,7 @@ export class SupportService {
     await this.userRepository.save(user);
 
     const msg =
-      'Пожалуйста, введите ваш запрос в следующем сообщении (допускается одна фотография или видео)';
+      'Пожалуйста, введите ваш запрос в следующем сообщении (допускается фото, видео, кружок, стикер или голосовое сообщение)';
     const kb = Markup.inlineKeyboard([
       [
         Markup.button.callback('« Назад', 'back_dynamic'),
@@ -91,7 +91,7 @@ export class SupportService {
     await this.userRepository.save(user);
 
     const msg =
-      'Пожалуйста, введите ваше предложение в следующем сообщении (допускается одна фотография или видео)';
+      'Пожалуйста, введите ваше предложение в следующем сообщении (допускается фото, видео, кружок, стикер или голосовое сообщение)';
     const kb = Markup.inlineKeyboard([
       [
         Markup.button.callback('« Назад', 'back_dynamic'),
@@ -287,6 +287,175 @@ export class SupportService {
     await ctx.reply(replyMessage);
   }
 
+  async handleSupportSticker(ctx: Context, user: User, fileId: string) {
+    const type = user.state === 'SUPPORT' ? 'Проблема' : 'Предложение';
+    const adminChatId = this.configService.get<string>('ADMIN_CHAT_ID');
+
+    const request = this.supportRequestRepository.create({
+      userId: user.chatId,
+      messages: [
+        {
+          message: '[СТИКЕР]',
+          createdAt: new Date().toISOString(),
+          isAdmin: false,
+          mediaType: 'sticker',
+          fileId,
+        },
+      ],
+      status: 'pending',
+      lastMessageAt: new Date(),
+    });
+    await this.supportRequestRepository.save(request);
+
+    const userInfo = await this.getUserInfoForAdmin(user);
+
+    const replyMessage = 'Ваш стикер отправлен в поддержку. Спасибо!';
+
+    const kb = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Ответить', callback_data: `admin_reply:${user.chatId}` }],
+        ],
+      },
+    };
+
+    await ctx.telegram.sendSticker(adminChatId, fileId);
+    await ctx.telegram.sendMessage(
+      adminChatId,
+      `📩 <b>Новая ${type}</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос (стикер)</b>\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`,
+      { parse_mode: 'HTML', ...kb },
+    );
+
+    if (user.stateData?.menuMessageId) {
+      try {
+        await ctx.telegram.deleteMessage(
+          user.chatId,
+          user.stateData.menuMessageId,
+        );
+      } catch (e) {}
+    }
+
+    user.state = null;
+    user.stateData = null;
+    await this.userRepository.save(user);
+    await ctx.reply(replyMessage);
+  }
+
+  async handleSupportVoice(
+    ctx: Context,
+    user: User,
+    fileId: string,
+    caption: string,
+  ) {
+    const type = user.state === 'SUPPORT' ? 'Проблема' : 'Предложение';
+    const adminChatId = this.configService.get<string>('ADMIN_CHAT_ID');
+
+    const request = this.supportRequestRepository.create({
+      userId: user.chatId,
+      messages: [
+        {
+          message: caption || '[ГОЛОСОВОЕ СООБЩЕНИЕ]',
+          createdAt: new Date().toISOString(),
+          isAdmin: false,
+          mediaType: 'voice',
+          fileId,
+        },
+      ],
+      status: 'pending',
+      lastMessageAt: new Date(),
+    });
+    await this.supportRequestRepository.save(request);
+
+    const userInfo = await this.getUserInfoForAdmin(user);
+
+    const replyMessage =
+      'Ваше голосовое сообщение отправлено в поддержку. Спасибо!';
+
+    const kb = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Ответить', callback_data: `admin_reply:${user.chatId}` }],
+        ],
+      },
+    };
+
+    const voiceCaption = `📩 <b>Новая ${type}</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос (голосовое):</b>\n${caption || '[без текста]'}\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+
+    await ctx.telegram.sendVoice(adminChatId, fileId, {
+      caption: voiceCaption,
+      parse_mode: 'HTML',
+      ...kb,
+    });
+
+    if (user.stateData?.menuMessageId) {
+      try {
+        await ctx.telegram.deleteMessage(
+          user.chatId,
+          user.stateData.menuMessageId,
+        );
+      } catch (e) {}
+    }
+
+    user.state = null;
+    user.stateData = null;
+    await this.userRepository.save(user);
+    await ctx.reply(replyMessage);
+  }
+
+  async handleSupportVideoNote(ctx: Context, user: User, fileId: string) {
+    const type = user.state === 'SUPPORT' ? 'Проблема' : 'Предложение';
+    const adminChatId = this.configService.get<string>('ADMIN_CHAT_ID');
+
+    const request = this.supportRequestRepository.create({
+      userId: user.chatId,
+      messages: [
+        {
+          message: '[ВИДЕО-КРУЖОК]',
+          createdAt: new Date().toISOString(),
+          isAdmin: false,
+          mediaType: 'video_note',
+          fileId,
+        },
+      ],
+      status: 'pending',
+      lastMessageAt: new Date(),
+    });
+    await this.supportRequestRepository.save(request);
+
+    const userInfo = await this.getUserInfoForAdmin(user);
+
+    const replyMessage = 'Ваш видео-кружок отправлен в поддержку. Спасибо!';
+
+    const kb = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Ответить', callback_data: `admin_reply:${user.chatId}` }],
+        ],
+      },
+    };
+
+    await ctx.telegram.sendVideoNote(adminChatId, fileId);
+    await ctx.telegram.sendMessage(
+      adminChatId,
+      `📩 <b>Новая ${type}</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Запрос (видео-кружок)</b>\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`,
+      { parse_mode: 'HTML', ...kb },
+    );
+
+    if (user.stateData?.menuMessageId) {
+      try {
+        await ctx.telegram.deleteMessage(
+          user.chatId,
+          user.stateData.menuMessageId,
+        );
+      } catch (e) {}
+    }
+
+    user.state = null;
+    user.stateData = null;
+    await this.userRepository.save(user);
+    await ctx.reply(replyMessage);
+  }
+
   async handleReplyCommand(
     ctx: Context,
     targetChatId: string,
@@ -377,7 +546,7 @@ export class SupportService {
     user.stateData = { targetChatId };
     await this.userRepository.save(user);
     await ctx.reply(
-      `Отвечаете пользователю (chatId: ${targetChatId}). Отправьте текст ответа или фотографию с подписью — подпись станет текстом ответа.`,
+      `Отвечаете пользователю (chatId: ${targetChatId}). Отправьте текст, фото, кружок, стикер или голосовое. Для фото: /replyPhoto, для кружка: /replyVideoNote, для стикера: /replySticker, для голоса: /replyVoice chat_id [текст].`,
     );
   }
 
@@ -438,6 +607,260 @@ export class SupportService {
     } catch (e: any) {
       this.logger.error(
         `Failed to send support photo reply to ${targetChatId}`,
+        e,
+      );
+
+      const targetUser =
+        (await this.userRepository.findOne({
+          where: { chatId: targetChatId },
+        })) || null;
+
+      const isBlockedError =
+        e.response?.error_code === 403 ||
+        e.message?.includes('bot was blocked');
+
+      if (targetUser && isBlockedError) {
+        if (!targetUser.isBlocked) {
+          targetUser.isBlocked = true;
+          await this.userRepository.save(targetUser);
+        }
+
+        await ctx.reply(
+          '⚠️ Ответ не доставлен: пользователь заблокировал бота или отключил переписку.',
+        );
+      } else {
+        await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
+      }
+    }
+  }
+
+  async handleReplyStickerCommand(
+    ctx: Context,
+    user: User,
+    targetChatId: string,
+  ): Promise<void> {
+    user.state = 'ADMIN_REPLY_STICKER';
+    user.stateData = { targetChatId };
+    await this.userRepository.save(user);
+    await ctx.reply('Теперь отправьте стикер для ответа');
+  }
+
+  async handleReplySticker(ctx: Context, user: User, fileId: string) {
+    const targetChatId = user.stateData?.targetChatId;
+
+    try {
+      if (!targetChatId) {
+        await ctx.reply('Ошибка: не найден получатель для ответа.');
+        return;
+      }
+
+      const replyKeyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('💬 Ответить', 'user_reply_to_admin')],
+      ]);
+
+      await ctx.telegram.sendSticker(targetChatId, fileId, replyKeyboard);
+
+      const request = await this.supportRequestRepository.findOne({
+        where: { userId: targetChatId },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (request) {
+        request.messages.push({
+          message: '[СТИКЕР]',
+          createdAt: new Date().toISOString(),
+          isAdmin: true,
+          mediaType: 'sticker',
+          fileId,
+        });
+        request.status = 'answered';
+        request.lastMessageAt = new Date();
+        await this.supportRequestRepository.save(request);
+      }
+
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      await ctx.reply('Ответ со стикером отправлен!');
+    } catch (e: any) {
+      this.logger.error(
+        `Failed to send support sticker reply to ${targetChatId}`,
+        e,
+      );
+
+      const targetUser =
+        (await this.userRepository.findOne({
+          where: { chatId: targetChatId },
+        })) || null;
+
+      const isBlockedError =
+        e.response?.error_code === 403 ||
+        e.message?.includes('bot was blocked');
+
+      if (targetUser && isBlockedError) {
+        if (!targetUser.isBlocked) {
+          targetUser.isBlocked = true;
+          await this.userRepository.save(targetUser);
+        }
+
+        await ctx.reply(
+          '⚠️ Ответ не доставлен: пользователь заблокировал бота или отключил переписку.',
+        );
+      } else {
+        await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
+      }
+    }
+  }
+
+  async handleReplyVoiceCommand(
+    ctx: Context,
+    user: User,
+    targetChatId: string,
+    replyText: string,
+  ): Promise<void> {
+    user.state = 'ADMIN_REPLY_VOICE';
+    user.stateData = { targetChatId, replyText };
+    await this.userRepository.save(user);
+    await ctx.reply('Теперь отправьте голосовое сообщение для ответа');
+  }
+
+  async handleReplyVoice(
+    ctx: Context,
+    user: User,
+    fileId: string,
+    replyTextOverride?: string,
+  ) {
+    const targetChatId = user.stateData?.targetChatId;
+    const replyText =
+      replyTextOverride ??
+      (user.stateData && (user.stateData as any).replyText) ??
+      '';
+
+    try {
+      if (!targetChatId) {
+        await ctx.reply('Ошибка: не найден получатель для ответа.');
+        return;
+      }
+
+      const replyKeyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('💬 Ответить', 'user_reply_to_admin')],
+      ]);
+
+      await ctx.telegram.sendVoice(targetChatId, fileId, {
+        caption:
+          '📩 Ответ от поддержки:\n' +
+          (replyText && replyText.trim().length > 0
+            ? replyText
+            : '[без текста]'),
+        ...replyKeyboard,
+      });
+
+      const request = await this.supportRequestRepository.findOne({
+        where: { userId: targetChatId },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (request) {
+        request.messages.push({
+          message:
+            replyText && replyText.trim().length > 0
+              ? replyText
+              : '[ГОЛОСОВОЕ]',
+          createdAt: new Date().toISOString(),
+          isAdmin: true,
+          mediaType: 'voice',
+          fileId,
+        });
+        request.status = 'answered';
+        request.lastMessageAt = new Date();
+        await this.supportRequestRepository.save(request);
+      }
+
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      await ctx.reply('Ответ с голосовым сообщением отправлен!');
+    } catch (e: any) {
+      this.logger.error(
+        `Failed to send support voice reply to ${targetChatId}`,
+        e,
+      );
+
+      const targetUser =
+        (await this.userRepository.findOne({
+          where: { chatId: targetChatId },
+        })) || null;
+
+      const isBlockedError =
+        e.response?.error_code === 403 ||
+        e.message?.includes('bot was blocked');
+
+      if (targetUser && isBlockedError) {
+        if (!targetUser.isBlocked) {
+          targetUser.isBlocked = true;
+          await this.userRepository.save(targetUser);
+        }
+
+        await ctx.reply(
+          '⚠️ Ответ не доставлен: пользователь заблокировал бота или отключил переписку.',
+        );
+      } else {
+        await ctx.reply('Ошибка при отправке ответа. Проверьте chat_id.');
+      }
+    }
+  }
+
+  async handleReplyVideoNoteCommand(
+    ctx: Context,
+    user: User,
+    targetChatId: string,
+  ): Promise<void> {
+    user.state = 'ADMIN_REPLY_VIDEO_NOTE';
+    user.stateData = { targetChatId };
+    await this.userRepository.save(user);
+    await ctx.reply('Теперь отправьте видео-кружок для ответа');
+  }
+
+  async handleReplyVideoNote(ctx: Context, user: User, fileId: string) {
+    const targetChatId = user.stateData?.targetChatId;
+
+    try {
+      if (!targetChatId) {
+        await ctx.reply('Ошибка: не найден получатель для ответа.');
+        return;
+      }
+
+      const replyKeyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('💬 Ответить', 'user_reply_to_admin')],
+      ]);
+
+      await ctx.telegram.sendVideoNote(targetChatId, fileId, replyKeyboard);
+
+      const request = await this.supportRequestRepository.findOne({
+        where: { userId: targetChatId },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (request) {
+        request.messages.push({
+          message: '[ВИДЕО-КРУЖОК]',
+          createdAt: new Date().toISOString(),
+          isAdmin: true,
+          mediaType: 'video_note',
+          fileId,
+        });
+        request.status = 'answered';
+        request.lastMessageAt = new Date();
+        await this.supportRequestRepository.save(request);
+      }
+
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      await ctx.reply('Ответ с видео-кружком отправлен!');
+    } catch (e: any) {
+      this.logger.error(
+        `Failed to send support video note reply to ${targetChatId}`,
         e,
       );
 

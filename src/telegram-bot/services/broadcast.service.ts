@@ -119,6 +119,47 @@ export class BroadcastService {
     );
   }
 
+  async handleBroadcastSticker(
+    ctx: Context,
+    fileId: string,
+    excludeChatIds?: string[],
+  ) {
+    const resolved = excludeChatIds?.length
+      ? await this.resolveExcludeIdentifiers(excludeChatIds)
+      : [];
+    await this.broadcastStickerToAllUsers(fileId, ctx, resolved);
+  }
+
+  async handleBroadcastVoice(
+    ctx: Context,
+    fileId: string,
+    caption: string,
+    captionEntities?: MessageEntity[],
+    excludeChatIds?: string[],
+  ) {
+    const resolved = excludeChatIds?.length
+      ? await this.resolveExcludeIdentifiers(excludeChatIds)
+      : [];
+    await this.broadcastVoiceToAllUsers(
+      fileId,
+      caption,
+      ctx,
+      captionEntities,
+      resolved,
+    );
+  }
+
+  async handleBroadcastVideoNote(
+    ctx: Context,
+    fileId: string,
+    excludeChatIds?: string[],
+  ) {
+    const resolved = excludeChatIds?.length
+      ? await this.resolveExcludeIdentifiers(excludeChatIds)
+      : [];
+    await this.broadcastVideoNoteToAllUsers(fileId, ctx, resolved);
+  }
+
   private async broadcastToAllUsers(
     text: string,
     ctx: Context,
@@ -284,6 +325,155 @@ export class BroadcastService {
         : '';
     await ctx.reply(
       `Видео отправлено ${success} пользователям.${excludeInfo}\nОшибок: ${failed}${blocked.length > 0 ? `\n\nЗаблокировали бота:\n${blocked.join('\n')}` : ''}`,
+    );
+  }
+
+  private async broadcastStickerToAllUsers(
+    fileId: string,
+    ctx: Context,
+    excludeChatIds: string[] = [],
+  ) {
+    const users = await this.userRepository.find({
+      where: { isBlocked: false },
+    });
+    const excludeSet = new Set(excludeChatIds);
+    const filtered =
+      excludeSet.size > 0
+        ? users.filter((u) => !excludeSet.has(u.chatId))
+        : users;
+    let success = 0;
+    let failed = 0;
+    const blocked: string[] = [];
+
+    for (const user of filtered) {
+      try {
+        await ctx.telegram.sendSticker(user.chatId, fileId);
+        success++;
+      } catch (e: any) {
+        failed++;
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
+          blocked.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+          }
+        }
+      }
+    }
+
+    const excludeInfo =
+      excludeChatIds.length > 0
+        ? ` Исключено: ${excludeChatIds.length} чел.`
+        : '';
+    await ctx.reply(
+      `Стикер отправлен ${success} пользователям.${excludeInfo}\nОшибок: ${failed}${blocked.length > 0 ? `\n\nЗаблокировали бота:\n${blocked.join('\n')}` : ''}`,
+    );
+  }
+
+  private async broadcastVoiceToAllUsers(
+    fileId: string,
+    caption: string,
+    ctx: Context,
+    captionEntities?: MessageEntity[],
+    excludeChatIds: string[] = [],
+  ) {
+    const users = await this.userRepository.find({
+      where: { isBlocked: false },
+    });
+    const excludeSet = new Set(excludeChatIds);
+    const filtered =
+      excludeSet.size > 0
+        ? users.filter((u) => !excludeSet.has(u.chatId))
+        : users;
+    let success = 0;
+    let failed = 0;
+    const blocked: string[] = [];
+    const fullCaption = BROADCAST_PREFIX + caption;
+    const captionOptions = captionEntities?.length
+      ? {
+          caption_entities: shiftEntities(
+            captionEntities,
+            BROADCAST_PREFIX.length,
+          ),
+        }
+      : { parse_mode: 'HTML' as const };
+
+    for (const user of filtered) {
+      try {
+        await ctx.telegram.sendVoice(user.chatId, fileId, {
+          caption: fullCaption,
+          ...captionOptions,
+        });
+        success++;
+      } catch (e: any) {
+        failed++;
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
+          blocked.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+          }
+        }
+      }
+    }
+
+    const excludeInfo =
+      excludeChatIds.length > 0
+        ? ` Исключено: ${excludeChatIds.length} чел.`
+        : '';
+    await ctx.reply(
+      `Голосовое сообщение отправлено ${success} пользователям.${excludeInfo}\nОшибок: ${failed}${blocked.length > 0 ? `\n\nЗаблокировали бота:\n${blocked.join('\n')}` : ''}`,
+    );
+  }
+
+  private async broadcastVideoNoteToAllUsers(
+    fileId: string,
+    ctx: Context,
+    excludeChatIds: string[] = [],
+  ) {
+    const users = await this.userRepository.find({
+      where: { isBlocked: false },
+    });
+    const excludeSet = new Set(excludeChatIds);
+    const filtered =
+      excludeSet.size > 0
+        ? users.filter((u) => !excludeSet.has(u.chatId))
+        : users;
+    let success = 0;
+    let failed = 0;
+    const blocked: string[] = [];
+
+    for (const user of filtered) {
+      try {
+        await ctx.telegram.sendVideoNote(user.chatId, fileId);
+        success++;
+      } catch (e: any) {
+        failed++;
+        if (
+          e.response?.error_code === 403 ||
+          e.message?.includes('bot was blocked')
+        ) {
+          blocked.push(user.username || user.chatId);
+          if (!user.isBlocked) {
+            user.isBlocked = true;
+            await this.userRepository.save(user);
+          }
+        }
+      }
+    }
+
+    const excludeInfo =
+      excludeChatIds.length > 0
+        ? ` Исключено: ${excludeChatIds.length} чел.`
+        : '';
+    await ctx.reply(
+      `Видео-кружок отправлен ${success} пользователям.${excludeInfo}\nОшибок: ${failed}${blocked.length > 0 ? `\n\nЗаблокировали бота:\n${blocked.join('\n')}` : ''}`,
     );
   }
 }

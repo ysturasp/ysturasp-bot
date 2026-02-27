@@ -1344,7 +1344,7 @@ export class TelegramBotService {
     if (isCallback2) {
       try {
         await ctx.editMessageText(
-          'Отправьте текст для рассылки или фото/видео с подписью.\n\nЧтобы исключить пользователей, первой строкой напишите:\n<code>!except user1, 123456</code>\n(далее — текст рассылки). Указать можно @username или chat id. Без этой строки рассылка пойдёт всем.',
+          'Отправьте текст для рассылки, фото/видео/кружок/стикер/голосовое с подписью (где доступно).\n\nЧтобы исключить пользователей, первой строкой напишите:\n<code>!except user1, 123456</code>\n(далее — текст рассылки). Указать можно @username или chat id. Без этой строки рассылка пойдёт всем.',
           { ...(kb2 as any), parse_mode: 'HTML' },
         );
         return;
@@ -1352,7 +1352,7 @@ export class TelegramBotService {
     }
     await this.replyWithFooter(
       ctx,
-      'Отправьте текст для рассылки или фото/видео с подписью.\n\nЧтобы исключить пользователей, первой строкой напишите:\n<code>!except user1, 123456</code>\n(далее — текст рассылки). Указать можно @username или chat id. Без этой строки рассылка пойдёт всем.',
+      'Отправьте текст для рассылки, фото/видео/кружок/стикер/голосовое с подписью (где доступно).\n\nЧтобы исключить пользователей, первой строкой напишите:\n<code>!except user1, 123456</code>\n(далее — текст рассылки). Указать можно @username или chat id. Без этой строки рассылка пойдёт всем.',
       { ...(kb2 as any), parse_mode: 'HTML' },
     );
   }
@@ -1680,7 +1680,7 @@ export class TelegramBotService {
 
     if (!broadcastText) {
       await ctx.reply(
-        'Использование:\n/broadcast текст_сообщения\n\nЧтобы исключить пользователей, первой строкой напишите:\n!except user1, 123456\n(далее — текст рассылки)\n\nИли отправьте фото с подписью.',
+        'Использование:\n/broadcast текст_сообщения\n\nЧтобы исключить пользователей, первой строкой напишите:\n!except user1, 123456\n(далее — текст рассылки)\n\nИли отправьте фото/видео/кружок/стикер/голосовое.',
       );
       return;
     }
@@ -1795,6 +1795,92 @@ export class TelegramBotService {
       user,
       targetChatId,
       replyText,
+    );
+    await this.userRepository.save(user);
+  }
+
+  @Command('replySticker')
+  async onReplySticker(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта команда доступна только администраторам.');
+      return;
+    }
+
+    const text = (ctx.message as any).text;
+    const parts = text.split(' ');
+
+    if (parts.length < 2) {
+      await ctx.reply(
+        'Использование: /replySticker chat_id\nЗатем отправьте стикер в следующем сообщении',
+      );
+      return;
+    }
+
+    const targetChatId = parts[1];
+
+    await this.supportService.handleReplyStickerCommand(
+      ctx,
+      user,
+      targetChatId,
+    );
+    await this.userRepository.save(user);
+  }
+
+  @Command('replyVoice')
+  async onReplyVoice(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта команда доступна только администраторам.');
+      return;
+    }
+
+    const text = (ctx.message as any).text;
+    const parts = text.split(' ');
+
+    if (parts.length < 2) {
+      await ctx.reply(
+        'Использование: /replyVoice chat_id [текст_подписи]\nЗатем отправьте голосовое сообщение в следующем сообщении',
+      );
+      return;
+    }
+
+    const targetChatId = parts[1];
+    const replyText = parts.slice(2).join(' ');
+
+    await this.supportService.handleReplyVoiceCommand(
+      ctx,
+      user,
+      targetChatId,
+      replyText,
+    );
+    await this.userRepository.save(user);
+  }
+
+  @Command('replyVideoNote')
+  async onReplyVideoNote(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user.isAdmin) {
+      await ctx.reply('❌ Эта команда доступна только администраторам.');
+      return;
+    }
+
+    const text = (ctx.message as any).text;
+    const parts = text.split(' ');
+
+    if (parts.length < 2) {
+      await ctx.reply(
+        'Использование: /replyVideoNote chat_id\nЗатем отправьте видео-кружок в следующем сообщении',
+      );
+      return;
+    }
+
+    const targetChatId = parts[1];
+
+    await this.supportService.handleReplyVideoNoteCommand(
+      ctx,
+      user,
+      targetChatId,
     );
     await this.userRepository.save(user);
   }
@@ -2342,10 +2428,229 @@ export class TelegramBotService {
     }
   }
 
+  @On('sticker')
+  async onSticker(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    const message = ctx.message as any;
+    const sticker = message.sticker;
+    const fileId = sticker.file_id;
+
+    if (
+      (user.state === 'ADMIN_REPLY_STICKER' || user.state === 'ADMIN_REPLY') &&
+      user.isAdmin
+    ) {
+      await this.supportService.handleReplySticker(ctx, user, fileId);
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.state === 'BROADCAST' && user.isAdmin) {
+      await this.broadcastService.handleBroadcastSticker(ctx, fileId);
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.state === 'SUPPORT' || user.state === 'SUGGESTION') {
+      await this.supportService.handleSupportSticker(ctx, user, fileId);
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
+      try {
+        const admins = await this.userRepository.find({
+          where: { isAdmin: true },
+        });
+        const userInfo = await this.getUserInfoForAdmin(user);
+        const replyMessage =
+          'Стикер получен, но не указана тема. Используйте /support или /suggestion';
+        const stickerInfo = `🎭 <b>Стикер (вне контекста)</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>🆔 File ID:</b> <code>${fileId}</code>\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
+        ]);
+        for (const admin of admins) {
+          try {
+            await ctx.telegram.sendSticker(admin.chatId, fileId);
+            await ctx.telegram.sendMessage(admin.chatId, stickerInfo, {
+              parse_mode: 'HTML',
+              ...kb,
+            } as any);
+          } catch (e) {
+            this.logger.debug(
+              `Failed forwarding sticker to admin ${admin.chatId}`,
+            );
+          }
+        }
+      } catch (e) {
+        this.logger.error('Error while forwarding sticker to admins', e);
+      }
+      await ctx.reply(
+        'Стикер получен, но не указана тема. Используйте /support или /suggestion',
+      );
+    }
+  }
+
+  @On('video_note')
+  async onVideoNote(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    const message = ctx.message as any;
+    const videoNote = message.video_note;
+    const fileId = videoNote.file_id;
+
+    if (
+      (user.state === 'ADMIN_REPLY_VIDEO_NOTE' ||
+        user.state === 'ADMIN_REPLY') &&
+      user.isAdmin
+    ) {
+      await this.supportService.handleReplyVideoNote(ctx, user, fileId);
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.state === 'BROADCAST' && user.isAdmin) {
+      await this.broadcastService.handleBroadcastVideoNote(ctx, fileId);
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.state === 'SUPPORT' || user.state === 'SUGGESTION') {
+      await this.supportService.handleSupportVideoNote(ctx, user, fileId);
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
+      try {
+        const admins = await this.userRepository.find({
+          where: { isAdmin: true },
+        });
+        const userInfo = await this.getUserInfoForAdmin(user);
+        const replyMessage =
+          'Видео-кружок получен, но не указана тема. Используйте /support или /suggestion';
+        const videoNoteInfo = `🎬 <b>Видео-кружок (вне контекста)</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>🆔 File ID:</b> <code>${fileId}</code>\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
+        ]);
+        for (const admin of admins) {
+          try {
+            await ctx.telegram.sendVideoNote(admin.chatId, fileId);
+            await ctx.telegram.sendMessage(admin.chatId, videoNoteInfo, {
+              parse_mode: 'HTML',
+              ...kb,
+            } as any);
+          } catch (e) {
+            this.logger.debug(
+              `Failed forwarding video note to admin ${admin.chatId}`,
+            );
+          }
+        }
+      } catch (e) {
+        this.logger.error('Error while forwarding video note to admins', e);
+      }
+      await ctx.reply(
+        'Видео-кружок получен, но не указана тема. Используйте /support или /suggestion',
+      );
+    }
+  }
+
   @On('voice')
   async onVoice(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
     if (!user) return;
+
+    const message = ctx.message as any;
+    const voice = message.voice;
+    const fileId = voice.file_id;
+    const caption = message.caption || '';
+
+    if (
+      (user.state === 'ADMIN_REPLY_VOICE' || user.state === 'ADMIN_REPLY') &&
+      user.isAdmin
+    ) {
+      await this.supportService.handleReplyVoice(ctx, user, fileId, caption);
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.state === 'BROADCAST' && user.isAdmin) {
+      const captionEntities = (
+        message as {
+          caption_entities?: import('telegraf/types').MessageEntity[];
+        }
+      ).caption_entities;
+      const parsed = parseBroadcastExclude(caption || '');
+      let entities = captionEntities;
+      if (parsed.entityOffsetShift > 0 && entities?.length) {
+        entities = entities
+          .filter(
+            (e) =>
+              e.offset >= parsed.entityOffsetShift &&
+              e.offset + e.length <=
+                parsed.entityOffsetShift + parsed.text.length,
+          )
+          .map((e) => ({
+            ...e,
+            offset: e.offset - parsed.entityOffsetShift,
+          }));
+      }
+      await this.broadcastService.handleBroadcastVoice(
+        ctx,
+        fileId,
+        parsed.text || caption,
+        entities,
+        parsed.excludeIdentifiers.length
+          ? parsed.excludeIdentifiers
+          : undefined,
+      );
+      user.state = null;
+      user.stateData = null;
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user.state === 'SUPPORT' || user.state === 'SUGGESTION') {
+      await this.supportService.handleSupportVoice(ctx, user, fileId, caption);
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (user && !user.isAdmin && ctx.chat?.type === 'private') {
+      try {
+        const admins = await this.userRepository.find({
+          where: { isAdmin: true },
+        });
+        const userInfo = await this.getUserInfoForAdmin(user);
+        const replyMessage =
+          'Голосовое получено, но не указана тема. Используйте /support или /suggestion';
+        const voiceInfo = `🎤 <b>Голосовое сообщение (вне контекста)</b>\n\n${userInfo}\n━━━━━━━━━━━━━━━\n<b>📝 Подпись:</b>\n${caption || '[без текста]'}\n<b>🆔 File ID:</b> <code>${fileId}</code>\n\n<b>✅ Ответ пользователю:</b>\n${replyMessage}`;
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('Ответить', `admin_reply:${user.chatId}`)],
+        ]);
+        for (const admin of admins) {
+          try {
+            await ctx.telegram.sendVoice(admin.chatId, fileId, {
+              caption: voiceInfo,
+              parse_mode: 'HTML',
+              ...kb,
+            } as any);
+          } catch (e) {
+            this.logger.debug(
+              `Failed forwarding voice to admin ${admin.chatId}`,
+            );
+          }
+        }
+      } catch (e) {
+        this.logger.error('Error while forwarding voice to admins', e);
+      }
+      await ctx.reply(
+        'Голосовое получено, но не указана тема. Используйте /support или /suggestion',
+      );
+      return;
+    }
 
     if (!user.state && ctx.chat?.type === 'private') {
       await this.textHandlerService.handleVoice(ctx, user);
