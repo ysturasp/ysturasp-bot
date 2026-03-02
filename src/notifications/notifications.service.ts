@@ -240,10 +240,6 @@ ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`.trim();
           teacherName: lesson.teacherName,
         },
       });
-
-      this.logger.log(
-        `Notification sent to ${sub.user.chatId} for ${groupName}: ${lesson.lessonName}`,
-      );
     } catch (e: any) {
       this.logger.error(
         `Failed to send notification to ${sub.user.chatId} for ${groupName}`,
