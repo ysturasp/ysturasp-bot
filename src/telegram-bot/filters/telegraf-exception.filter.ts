@@ -34,6 +34,19 @@ export class TelegrafExceptionFilter implements ExceptionFilter {
     const errorDescription =
       (exception as any).description || exception.message;
 
+    const isCallbackQueryExpired =
+      typeof errorDescription === 'string' &&
+      (errorDescription.includes('query is too old') ||
+        errorDescription.includes('response timeout expired') ||
+        errorDescription.includes('query ID is invalid'));
+
+    if (isCallbackQueryExpired) {
+      this.logger.debug(
+        `Callback query expired or invalid (${ctx.updateType}): ${errorDescription}`,
+      );
+      return;
+    }
+
     this.logger.error(
       `Telegraf error in ${updateType} update for ${userContext}: ${errorDescription}${messageContext}\nFull Error: ${exception.stack}`,
     );

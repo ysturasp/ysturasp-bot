@@ -74,6 +74,29 @@ export class ScheduleCommandService {
     }
   }
 
+  private async safeAnswerCbQuery(ctx: Context, text?: string): Promise<void> {
+    try {
+      if (text !== undefined) {
+        await ctx.answerCbQuery(text);
+      } else {
+        await this.safeAnswerCbQuery(ctx);
+      }
+    } catch (error: any) {
+      const msg = error?.message || String(error || '');
+      if (
+        msg.includes('query is too old') ||
+        msg.includes('response timeout expired') ||
+        msg.includes('query ID is invalid')
+      ) {
+        this.logger.debug(
+          'Callback query expired or invalid, skipping answerCbQuery',
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
   async handleExams(
     ctx: Context,
     userId: string,
@@ -340,7 +363,7 @@ export class ScheduleCommandService {
   }
 
   async handleQuickView(ctx: Context, groupName: string): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
 
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback('📅 Сегодня', `view_day:${groupName}:0`)],
@@ -363,7 +386,7 @@ export class ScheduleCommandService {
     groupName: string,
     dayOffset: number,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
 
     const user = await this.userHelperService.getUser(ctx);
     const schedule = await this.scheduleService.getSchedule(groupName);
@@ -403,7 +426,7 @@ export class ScheduleCommandService {
     groupName: string,
     weekOffset = 0,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
 
     const user = await this.userHelperService.getUser(ctx);
     const schedule = await this.scheduleService.getSchedule(groupName);
@@ -453,7 +476,7 @@ export class ScheduleCommandService {
   ): Promise<void> {
     user.state = null;
     user.stateData = null;
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
 
     const keyboard = Markup.inlineKeyboard([
       [
@@ -646,7 +669,7 @@ export class ScheduleCommandService {
     teacherId: number,
     query?: string,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
     const teachers = await this.scheduleService.getTeachers();
     const teacher = teachers.find((t) => t.id === teacherId);
     if (!teacher) {
@@ -700,7 +723,7 @@ export class ScheduleCommandService {
     page = 0,
   ): Promise<void> {
     const isCallback = !!ctx.callbackQuery;
-    if (isCallback) await ctx.answerCbQuery();
+    if (isCallback) await this.safeAnswerCbQuery(ctx);
 
     const teachers = await this.scheduleService.getTeachers();
     const matchingTeachers = teachers.filter((t) =>
@@ -788,7 +811,7 @@ export class ScheduleCommandService {
     dayOffset: number,
     query?: string,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
     const schedule = await this.scheduleService.getTeacherSchedule(teacherId);
     if (!schedule) {
       await this.safeEditMessageText(
@@ -837,7 +860,7 @@ export class ScheduleCommandService {
     weekOffset = 0,
     query?: string,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
     const schedule = await this.scheduleService.getTeacherSchedule(teacherId);
     if (!schedule) {
       await this.safeEditMessageText(
@@ -897,7 +920,7 @@ export class ScheduleCommandService {
     dayOffset: number,
     query?: string,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
     const schedule = await this.scheduleService.getAudienceSchedule(audienceId);
     if (!schedule) {
       await this.safeEditMessageText(
@@ -946,7 +969,7 @@ export class ScheduleCommandService {
     weekOffset = 0,
     query?: string,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
     const schedule = await this.scheduleService.getAudienceSchedule(audienceId);
     if (!schedule) {
       await this.safeEditMessageText(
@@ -1005,7 +1028,7 @@ export class ScheduleCommandService {
     audienceId: string,
     query?: string,
   ): Promise<void> {
-    await ctx.answerCbQuery();
+    await this.safeAnswerCbQuery(ctx);
     const audiences = await this.scheduleService.getAudiences();
     const audience = audiences.find((a) => String(a.id) === String(audienceId));
     if (!audience) {
@@ -1059,7 +1082,7 @@ export class ScheduleCommandService {
     page = 0,
   ): Promise<void> {
     const isCallback = !!ctx.callbackQuery;
-    if (isCallback) await ctx.answerCbQuery();
+    if (isCallback) await this.safeAnswerCbQuery(ctx);
 
     const audiences = await this.scheduleService.getAudiences();
     const cleanQuery = normalizeAudienceName(query);
