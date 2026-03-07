@@ -79,7 +79,7 @@ export class ScheduleCommandService {
       if (text !== undefined) {
         await ctx.answerCbQuery(text);
       } else {
-        await this.safeAnswerCbQuery(ctx);
+        await ctx.answerCbQuery();
       }
     } catch (error: any) {
       const msg = error?.message || String(error || '');
@@ -94,6 +94,28 @@ export class ScheduleCommandService {
         return;
       }
       throw error;
+    }
+  }
+
+  private readonly scheduleUnavailableMessage =
+    '❌ Что-то пошло не по плану, показать расписание не удалось 😔 попробуйте еще раз сейчас или позже';
+
+  private async sendScheduleUnavailableMessage(
+    ctx: Context,
+    groupName?: string,
+  ): Promise<void> {
+    this.logger.warn(
+      `Schedule unavailable shown to user (userId=${ctx.from?.id}, groupName=${groupName ?? 'unknown'})`,
+    );
+    // @ts-ignore
+    if (ctx.callbackQuery) {
+      await this.safeEditMessageText(ctx, this.scheduleUnavailableMessage, {
+        parse_mode: 'HTML',
+      });
+    } else {
+      await this.replyWithFooter(ctx, this.scheduleUnavailableMessage, {
+        parse_mode: 'HTML',
+      });
     }
   }
 
@@ -179,7 +201,13 @@ export class ScheduleCommandService {
 
     if (preferredGroupOnly) {
       const groupName = user.preferredGroup;
-      const schedule = await this.scheduleService.getSchedule(groupName);
+      let schedule: any;
+      try {
+        schedule = await this.scheduleService.getSchedule(groupName);
+      } catch {
+        await this.sendScheduleUnavailableMessage(ctx, groupName);
+        return;
+      }
       const exams = this.extractExamsFromSchedule(schedule);
 
       if (exams.length > 0) {
@@ -389,7 +417,13 @@ export class ScheduleCommandService {
     await this.safeAnswerCbQuery(ctx);
 
     const user = await this.userHelperService.getUser(ctx);
-    const schedule = await this.scheduleService.getSchedule(groupName);
+    let schedule: any;
+    try {
+      schedule = await this.scheduleService.getSchedule(groupName);
+    } catch {
+      await this.sendScheduleUnavailableMessage(ctx, groupName);
+      return;
+    }
     const filteredSchedule = await this.applySubjectExclusionsForUser(
       user.id,
       groupName,
@@ -429,7 +463,13 @@ export class ScheduleCommandService {
     await this.safeAnswerCbQuery(ctx);
 
     const user = await this.userHelperService.getUser(ctx);
-    const schedule = await this.scheduleService.getSchedule(groupName);
+    let schedule: any;
+    try {
+      schedule = await this.scheduleService.getSchedule(groupName);
+    } catch {
+      await this.sendScheduleUnavailableMessage(ctx, groupName);
+      return;
+    }
     const filteredSchedule = await this.applySubjectExclusionsForUser(
       user.id,
       groupName,
@@ -550,7 +590,13 @@ export class ScheduleCommandService {
       groupName = sub.groupName;
     }
 
-    const schedule = await this.scheduleService.getSchedule(groupName);
+    let schedule: any;
+    try {
+      schedule = await this.scheduleService.getSchedule(groupName);
+    } catch {
+      await this.sendScheduleUnavailableMessage(ctx, groupName);
+      return;
+    }
     const filteredSchedule = await this.applySubjectExclusionsForUser(
       userId,
       groupName,
