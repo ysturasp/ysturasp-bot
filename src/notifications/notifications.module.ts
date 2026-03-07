@@ -12,6 +12,8 @@ import { User } from '../database/entities/user.entity';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { SemesterStartBroadcastService } from './semester-start-broadcast.service';
 import { StatisticsService } from '../telegram-bot/services/statistics.service';
+import { UptimeRobotService } from './uptimerobot.service';
+import { UptimeRobotMonitorService } from './uptimerobot-monitor.service';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { StatisticsService } from '../telegram-bot/services/statistics.service';
     GradeNotificationsService,
     SemesterStartBroadcastService,
     StatisticsService,
+    UptimeRobotService,
+    UptimeRobotMonitorService,
   ],
 })
 export class NotificationsModule {}
