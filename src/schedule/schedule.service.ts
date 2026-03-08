@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import {
   getGroupScheduleKey,
-  getGroupsListKey,
+  getActualGroupsKey,
   getTeachersListKey,
   getAudiencesListKey,
   getTeacherScheduleKey,
@@ -60,15 +60,19 @@ export class ScheduleService {
   ) {}
 
   async getGroups(): Promise<string[]> {
-    const cacheKey = getGroupsListKey();
+    const cacheKey = getActualGroupsKey();
     try {
       const cachedRaw = await this.redis.get(cacheKey);
       if (cachedRaw) {
         try {
-          const parsed = JSON.parse(cachedRaw) as string[];
-          if (parsed && parsed.length) return parsed;
+          const parsed = JSON.parse(cachedRaw) as {
+            items?: Array<{ name: string; groups: string[] }>;
+          };
+          const sections = parsed?.items || [];
+          const groups = sections.flatMap((section) => section.groups || []);
+          if (groups.length) return groups;
         } catch (e) {
-          this.logger.debug('Failed to parse groups cache', e);
+          this.logger.debug('Failed to parse actual_groups cache', e);
         }
       }
 
@@ -80,25 +84,15 @@ export class ScheduleService {
         ),
       );
 
-      const rawItems = data.items || [];
-      let items: string[] = [];
-      if (rawItems.length && typeof rawItems[0] === 'string') {
-        items = rawItems as string[];
-      } else {
-        items = rawItems.flatMap((section: any) => {
-          if (Array.isArray(section.groups)) return section.groups as string[];
-          if (Array.isArray(section.items)) return section.items as string[];
-          return [] as string[];
-        });
-      }
-
       try {
-        await this.redis.set(cacheKey, JSON.stringify(items), 'EX', 3600);
+        await this.redis.set(cacheKey, JSON.stringify(data), 'EX', 3600);
       } catch (e) {
-        this.logger.debug('Failed to set groups cache', e);
+        this.logger.debug('Failed to set actual_groups cache', e);
       }
 
-      return items;
+      const sections = data.items || [];
+      const groups = sections.flatMap((section: any) => section.groups || []);
+      return groups;
     } catch (error) {
       this.logger.error('Error fetching groups', error);
       return [];

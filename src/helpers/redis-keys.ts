@@ -7,12 +7,8 @@ export function getGroupScheduleKey(groupName: string): string {
   return `schedule:${normalized}`;
 }
 
-export function getGroupsListKey(): string {
-  return 'schedule:groups_list';
-}
-
 export function getActualGroupsKey(): string {
-  return 'ystu:actual_groups';
+  return 'schedule:list:actual_groups';
 }
 
 export function getStatisticsDisciplinesKey(institute: string): string {
@@ -27,11 +23,11 @@ export function getStatisticsSubjectKey(
 }
 
 export function getTeachersListKey(): string {
-  return 'schedule:teachers_list';
+  return 'schedule:list:teachers';
 }
 
 export function getAudiencesListKey(): string {
-  return 'schedule:audiences_list';
+  return 'schedule:list:audiences';
 }
 
 export function getTeacherScheduleKey(teacherId: number | string): string {
