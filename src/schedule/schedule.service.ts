@@ -85,7 +85,9 @@ export class ScheduleService {
       );
 
       try {
-        await this.redis.set(cacheKey, JSON.stringify(data), 'EX', 3600);
+        const ttl = this.configService.get<number>('CACHE_TTL', 604800);
+        const cachePayload = { ...data, timestamp: Date.now() };
+        await this.redis.set(cacheKey, JSON.stringify(cachePayload), 'EX', ttl);
       } catch (e) {
         this.logger.debug('Failed to set actual_groups cache', e);
       }
@@ -230,7 +232,8 @@ export class ScheduleService {
       const cachedRaw = await this.redis.get(cacheKey);
       if (cachedRaw) {
         const parsed = JSON.parse(cachedRaw);
-        if (parsed && parsed.length) return parsed;
+        const items = Array.isArray(parsed) ? parsed : parsed?.items;
+        if (items && items.length) return items;
       }
 
       const token = this.configService.get<string>('ACCESS_TOKEN');
@@ -242,7 +245,9 @@ export class ScheduleService {
       );
 
       const items = data.items || [];
-      await this.redis.set(cacheKey, JSON.stringify(items), 'EX', 3600);
+      const ttl = this.configService.get<number>('CACHE_TTL', 604800);
+      const cachePayload = { ...data, timestamp: Date.now() };
+      await this.redis.set(cacheKey, JSON.stringify(cachePayload), 'EX', ttl);
       return items;
     } catch (error) {
       this.logger.error('Error fetching teachers', error);
@@ -256,7 +261,8 @@ export class ScheduleService {
       const cachedRaw = await this.redis.get(cacheKey);
       if (cachedRaw) {
         const parsed = JSON.parse(cachedRaw);
-        if (parsed && parsed.length) return parsed;
+        const items = Array.isArray(parsed) ? parsed : parsed?.items;
+        if (items && items.length) return items;
       }
 
       const token = this.configService.get<string>('ACCESS_TOKEN');
@@ -268,7 +274,9 @@ export class ScheduleService {
       );
 
       const items = data.items || [];
-      await this.redis.set(cacheKey, JSON.stringify(items), 'EX', 3600);
+      const ttl = this.configService.get<number>('CACHE_TTL', 604800);
+      const cachePayload = { ...data, timestamp: Date.now() };
+      await this.redis.set(cacheKey, JSON.stringify(cachePayload), 'EX', ttl);
       return items;
     } catch (error) {
       this.logger.error('Error fetching audiences', error);

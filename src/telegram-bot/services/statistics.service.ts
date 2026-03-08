@@ -118,11 +118,13 @@ export class StatisticsService {
         actualGroupsData = data;
 
         try {
+          const ttl = this.configService.get<number>('CACHE_TTL', 604800);
+          const cachePayload = { ...actualGroupsData, timestamp: Date.now() };
           await this.redis.set(
             cacheKey,
-            JSON.stringify(actualGroupsData),
+            JSON.stringify(cachePayload),
             'EX',
-            3600,
+            ttl,
           );
         } catch (e) {}
       } catch (error) {
