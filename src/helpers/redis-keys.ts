@@ -4,7 +4,7 @@ export function normalizeGroupName(groupName: string): string {
 
 export function getGroupScheduleKey(groupName: string): string {
   const normalized = normalizeGroupName(groupName);
-  return `schedule:${normalized}`;
+  return `schedule:group:${normalized}`;
 }
 
 export function getActualGroupsKey(): string {
