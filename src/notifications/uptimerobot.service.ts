@@ -64,7 +64,8 @@ export interface UptimeRobotResponse {
 @Injectable()
 export class UptimeRobotService {
   private readonly logger = new Logger(UptimeRobotService.name);
-  private readonly apiUrl = 'https://stats.uptimerobot.com/api/getMonitorList/COz2FUGsub';
+  private readonly apiUrl =
+    'https://stats.uptimerobot.com/api/getMonitorList/COz2FUGsub';
 
   constructor(private readonly httpService: HttpService) {}
 
@@ -104,4 +105,3 @@ export class UptimeRobotService {
     return data.data.filter((monitor) => monitor.statusClass === 'success');
   }
 }
-

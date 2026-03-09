@@ -30,6 +30,7 @@ import { AiModule } from '../ai/ai.module';
 import { UserAiContext } from '../database/entities/user-ai-context.entity';
 import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
 import { TelegrafExceptionFilter } from './filters/telegraf-exception.filter';
+import { FormatLimitClient } from '../ai/format-limit.client';
 import { APP_FILTER } from '@nestjs/core';
 
 @Module({
@@ -67,6 +68,7 @@ import { APP_FILTER } from '@nestjs/core';
     StatisticsService,
     AnalyticsMiddleware,
     AnalyticsLauncherService,
+    FormatLimitClient,
     {
       provide: APP_FILTER,
       useClass: TelegrafExceptionFilter,

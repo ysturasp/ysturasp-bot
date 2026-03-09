@@ -9,6 +9,7 @@ import { SubscriptionService } from './subscription.service';
 import { ScheduleCommandService } from './schedule-command.service';
 import { GroqService } from '../../ai/groq.service';
 import { AiLimitService } from '../../ai/ai-limit.service';
+import { FormatLimitClient } from '../../ai/format-limit.client';
 import {
   findCanonicalGroupName,
   normalizeGroupKey,
@@ -46,6 +47,7 @@ export class TextHandlerService {
     private readonly scheduleCommandService: ScheduleCommandService,
     private readonly groqService: GroqService,
     private readonly aiLimitService: AiLimitService,
+    private readonly formatLimitClient: FormatLimitClient,
   ) {}
 
   async handleText(ctx: Context, user: User, text: string): Promise<boolean> {

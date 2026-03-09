@@ -88,7 +88,8 @@ export class UptimeRobotMonitorService {
       ? `\n⏰ <b>Последний отвал:</b> ${this.formatDate(lastDowntime.date)}\n⏱ <b>Длительность:</b> ${this.formatDuration(lastDowntime.duration)} сек`
       : '';
 
-    const message = `🔴 <b>Сервис недоступен</b>\n\n` +
+    const message =
+      `🔴 <b>Сервис недоступен</b>\n\n` +
       `📛 <b>Название:</b> ${this.escapeHtml(monitor.name)}\n` +
       `🔧 <b>Тип:</b> ${this.escapeHtml(monitor.type)}\n` +
       `📊 <b>Uptime (30 дней):</b> ${monitor['30dRatio'].ratio}%\n` +
@@ -106,7 +107,8 @@ export class UptimeRobotMonitorService {
     adminChatId: string,
     monitor: UptimeRobotMonitor,
   ) {
-    const message = `✅ <b>Сервис восстановлен</b>\n\n` +
+    const message =
+      `✅ <b>Сервис восстановлен</b>\n\n` +
       `📛 <b>Название:</b> ${this.escapeHtml(monitor.name)}\n` +
       `🔧 <b>Тип:</b> ${this.escapeHtml(monitor.type)}\n` +
       `📊 <b>Uptime (30 дней):</b> ${monitor['30dRatio'].ratio}%\n` +
@@ -148,7 +150,9 @@ export class UptimeRobotMonitorService {
     }
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return remainingMinutes > 0 ? `${hours}ч ${remainingMinutes}м` : `${hours}ч`;
+    return remainingMinutes > 0
+      ? `${hours}ч ${remainingMinutes}м`
+      : `${hours}ч`;
   }
 
   private escapeHtml(text: string): string {
@@ -160,4 +164,3 @@ export class UptimeRobotMonitorService {
       .replace(/'/g, '&#039;');
   }
 }
-

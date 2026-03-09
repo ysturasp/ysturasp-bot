@@ -1,4 +1,5 @@
 import { Action, Command, Ctx, On, Start, Update } from 'nestjs-telegraf';
+import axios from 'axios';
 import { Context, Markup } from 'telegraf';
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -26,6 +27,7 @@ import { getFooterLinks } from '../config/links.config';
 import { GroqService } from '../ai/groq.service';
 import { AiLimitService } from '../ai/ai-limit.service';
 import { AiSubscriptionService } from '../ai/ai-subscription.service';
+import { FormatLimitClient } from '../ai/format-limit.client';
 import { UserAiContext } from '../database/entities/user-ai-context.entity';
 import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
 import { YooCheckout, ICreateRefund } from '@a2seven/yoo-checkout';
@@ -59,6 +61,7 @@ export class TelegramBotService {
     private readonly groqService: GroqService,
     private readonly aiLimitService: AiLimitService,
     private readonly aiSubscriptionService: AiSubscriptionService,
+    private readonly formatLimitClient: FormatLimitClient,
     @InjectRepository(UserAiContext)
     private readonly aiContextRepository: Repository<UserAiContext>,
     @InjectRepository(UserAiPayment)
@@ -140,6 +143,14 @@ export class TelegramBotService {
       link_preview_options: { is_disabled: true },
       ...extra,
     });
+  }
+
+  private sanitizeDocxFileName(fileName: string | undefined): string {
+    const base = (fileName || 'document.docx').replace(
+      /[^\w.\-а-яА-ЯёЁ]/g,
+      '_',
+    );
+    return base.toLowerCase().endsWith('.docx') ? base : `${base}.docx`;
   }
 
   @Command('logs')
@@ -277,6 +288,7 @@ export class TelegramBotService {
       [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
       [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
       [Markup.button.callback('👤 Профиль', 'open_profile')],
+      [Markup.button.callback('📄 Форматировать DOCX', 'open_format_help')],
       [
         Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
         Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
@@ -544,6 +556,7 @@ export class TelegramBotService {
       [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
       [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
       [Markup.button.callback('👤 Профиль', 'open_profile')],
+      [Markup.button.callback('📄 Форматировать DOCX', 'open_format_help')],
       [
         Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
         Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
@@ -1404,6 +1417,82 @@ export class TelegramBotService {
     await this.onSupportStars(ctx);
   }
 
+  @Action('open_format_help')
+  async onOpenFormatHelp(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    const user = await this.userHelperService.getUser(ctx);
+    const limit = await this.formatLimitClient.checkLimit(user.id, true);
+    const remaining = limit.remaining ?? 0;
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          '💳 Купить 10 форматирований',
+          'open_format_buy',
+        ),
+      ],
+    ]);
+
+    await this.replyWithFooter(
+      ctx,
+      `📄 <b>Форматирование DOCX по ГОСТ</b>\n\n` +
+        `Отправьте мне файл <code>.docx</code> в личный чат, и я верну отформатированную версию.\n\n` +
+        `Остаток форматирований: <b>${remaining}</b>`,
+      {
+        parse_mode: 'HTML',
+        ...keyboard,
+      },
+    );
+  }
+
+  @Action('open_format_buy')
+  async onOpenFormatBuy(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery();
+    await this.onFormatBuy(ctx);
+  }
+
+  @Action(/^check_format_payment:(.+)$/)
+  async onCheckFormatPayment(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery('Проверяю оплату...');
+    // @ts-ignore
+    const paymentId = ctx.match[1];
+    const user = await this.userHelperService.getUser(ctx);
+
+    try {
+      const status = await this.formatLimitClient.checkPaymentStatus(
+        user.id,
+        paymentId,
+        { isTelegram: true },
+      );
+
+      if (status.status === 'succeeded') {
+        const limit = await this.formatLimitClient.checkLimit(user.id, true);
+        await ctx.reply(
+          `✅ Оплата подтверждена.\n` +
+            `Начислено форматирований: ${status.formatsAdded}\n` +
+            `Текущий остаток: ${limit.remaining ?? 0}`,
+        );
+        return;
+      }
+
+      if (status.status === 'pending') {
+        await ctx.reply(
+          '⏳ Платеж пока в обработке. Подождите 10-30 секунд и нажмите «Проверить оплату» еще раз.',
+        );
+        return;
+      }
+
+      await ctx.reply(
+        `⚠️ Текущий статус платежа: ${status.status}\n` +
+          `Если деньги списались, но статус не меняется, напишите в поддержку.`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to check format payment status', error);
+      await ctx.reply(
+        '❌ Не удалось проверить статус платежа. Попробуйте позже.',
+      );
+    }
+  }
+
   @Action('open_set_default')
   async onOpenSetDefault(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
@@ -1488,6 +1577,7 @@ export class TelegramBotService {
         [Markup.button.callback('📩 Отправить проблему', 'open_support:main')],
         [Markup.button.callback('💡 Предложить идею', 'open_suggestion:main')],
         [Markup.button.callback('👤 Профиль', 'open_profile')],
+        [Markup.button.callback('📄 Форматировать DOCX', 'open_format_help')],
         [
           Markup.button.callback('🔔 Подписаться', 'open_subscribe:main'),
           Markup.button.callback('❌ Отписаться', 'open_unsubscribe'),
@@ -1638,6 +1728,61 @@ export class TelegramBotService {
   async onOpenAiPlus(@Ctx() ctx: Context) {
     await ctx.answerCbQuery();
     await this.onPlus(ctx);
+  }
+
+  @Command('format_limit')
+  async onFormatLimit(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    const limit = await this.formatLimitClient.checkLimit(user.id, true);
+    if (!limit.can) {
+      await ctx.reply(
+        `⚠️ Форматирование сейчас недоступно.\nПричина: ${limit.reason || 'достигнут лимит'}\n\n` +
+          `Чтобы увеличить лимит, используйте /format_buy`,
+      );
+      return;
+    }
+    await ctx.reply(
+      `✅ Форматирование доступно.\nОсталось попыток: <b>${limit.remaining ?? 0}</b>`,
+      { parse_mode: 'HTML' },
+    );
+  }
+
+  @Command('format_buy')
+  async onFormatBuy(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    try {
+      const payment = await this.formatLimitClient.createPayment(user.id, 10, {
+        isTelegram: true,
+      });
+
+      if (!payment.confirmationUrl) {
+        await ctx.reply(
+          '❌ Не удалось получить ссылку оплаты. Попробуйте позже.',
+        );
+        return;
+      }
+
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            '✅ Проверить оплату',
+            `check_format_payment:${payment.paymentId}`,
+          ),
+        ],
+      ]);
+
+      await ctx.reply(
+        `💳 Покупка 10 форматирований\n` +
+          `Перейдите по ссылке для оплаты:\n${payment.confirmationUrl}\n\n` +
+          `После оплаты нажмите «Проверить оплату».`,
+        keyboard,
+      );
+    } catch (error) {
+      this.logger.error('Failed to create format payment', error);
+      await ctx.reply(
+        '❌ Не удалось создать платеж. Попробуйте позже или обратитесь в поддержку.',
+      );
+    }
   }
 
   @Command('support_stars')
@@ -2424,6 +2569,87 @@ export class TelegramBotService {
     if (!user.state && !user.isAdmin) {
       await ctx.reply(
         'Фотография получена, но не указана тема. Используйте /support или /suggestion',
+      );
+    }
+  }
+
+  @On('document')
+  async onDocument(@Ctx() ctx: Context) {
+    const user = await this.userHelperService.getUser(ctx);
+    if (!user || ctx.chat?.type !== 'private') return;
+    if (user.state) return;
+
+    const message = ctx.message as any;
+    const document = message.document;
+
+    if (!document?.file_id) return;
+
+    const originalFileName = this.sanitizeDocxFileName(document.file_name);
+    if (!originalFileName.toLowerCase().endsWith('.docx')) {
+      await ctx.reply(
+        '⚠️ Поддерживаются только документы .docx\n\n' +
+          'Отправьте файл в формате DOCX и я отформатирую его по ГОСТ.',
+      );
+      return;
+    }
+
+    const fileSize = Number(document.file_size || 0);
+    const maxTelegramDocSize = 10 * 1024 * 1024;
+    if (fileSize > maxTelegramDocSize) {
+      await ctx.reply('⚠️ Файл слишком большой. Максимальный размер — 10 МБ.');
+      return;
+    }
+
+    const limit = await this.formatLimitClient.checkLimit(user.id, true);
+    if (!limit.can) {
+      await ctx.reply(
+        `⚠️ Лимит форматирования исчерпан.\n` +
+          `Осталось: ${limit.remaining ?? 0}\n\n` +
+          `Купить дополнительные форматирования: /format_buy`,
+      );
+      return;
+    }
+
+    await ctx.reply('⏳ Форматирую документ, это может занять до 30 секунд...');
+
+    try {
+      const fileLink = await ctx.telegram.getFileLink(document.file_id);
+      const response = await axios.get(fileLink.toString(), {
+        responseType: 'arraybuffer',
+      });
+      const sourceBuffer = Buffer.from(response.data);
+
+      const result = await this.formatLimitClient.processDocument(
+        user.id,
+        originalFileName,
+        sourceBuffer.toString('base64'),
+        { isTelegram: true },
+      );
+
+      if (!result.success || !result.formattedBase64) {
+        await ctx.reply(
+          `❌ Не удалось отформатировать документ: ${result.reason || 'ошибка сервиса'}`,
+        );
+        return;
+      }
+
+      const formattedBuffer = Buffer.from(result.formattedBase64, 'base64');
+      const targetName = originalFileName.endsWith('.docx')
+        ? `${originalFileName.slice(0, -5)}_gost.docx`
+        : `${originalFileName}_gost.docx`;
+
+      await ctx.replyWithDocument({
+        source: formattedBuffer,
+        filename: targetName,
+      });
+
+      await ctx.reply(
+        `✅ Готово. Осталось форматирований: ${result.remaining}`,
+      );
+    } catch (error) {
+      this.logger.error('Document formatting failed', error);
+      await ctx.reply(
+        '❌ Ошибка при обработке документа. Попробуйте позже или отправьте файл снова.',
       );
     }
   }
