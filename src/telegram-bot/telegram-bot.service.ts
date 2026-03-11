@@ -33,6 +33,7 @@ import { UserAiPayment } from '../database/entities/user-ai-payment.entity';
 import { YooCheckout, ICreateRefund } from '@a2seven/yoo-checkout';
 import * as crypto from 'crypto';
 import { escapeHtml } from '../helpers/html-escaper';
+import { TelegramCustomEmojis } from './helpers/emoji.helper';
 
 @Update()
 @Injectable()
@@ -2610,14 +2611,69 @@ export class TelegramBotService {
       return;
     }
 
-    await ctx.reply('⏳ Форматирую документ, это может занять до 30 секунд...');
-
+    let statusMessage;
     try {
+      const downloadEmoji = TelegramCustomEmojis.format.download.char;
+      const downloadText = ' Скачиваю файл из Telegram...';
+      const downloadFullText = downloadEmoji + downloadText;
+      try {
+        statusMessage = await ctx.reply(downloadFullText, {
+          entities: [
+            {
+              type: 'custom_emoji',
+              offset: 0,
+              length: downloadEmoji.length,
+              custom_emoji_id: TelegramCustomEmojis.format.download.id,
+            },
+          ],
+        } as any);
+      } catch (e) {
+        this.logger.warn(
+          'Failed to send download status with custom emoji, falling back to plain text',
+          e as any,
+        );
+        statusMessage = await ctx.reply('⬇️ Скачиваю файл из Telegram...');
+      }
+
       const fileLink = await ctx.telegram.getFileLink(document.file_id);
       const response = await axios.get(fileLink.toString(), {
         responseType: 'arraybuffer',
       });
       const sourceBuffer = Buffer.from(response.data);
+
+      const emojiChar = TelegramCustomEmojis.format.processing.char;
+      const processingText = ' Обрабатываю документ, почти готово...';
+      const processingFullText = emojiChar + processingText;
+
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMessage.message_id,
+          undefined,
+          processingFullText,
+          {
+            entities: [
+              {
+                type: 'custom_emoji',
+                offset: 0,
+                length: emojiChar.length,
+                custom_emoji_id: TelegramCustomEmojis.format.processing.id,
+              },
+            ],
+          } as any,
+        );
+      } catch (e) {
+        this.logger.warn(
+          'Failed to edit status message with custom emoji, falling back to plain text',
+          e as any,
+        );
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMessage.message_id,
+          undefined,
+          '⚙️ Обрабатываю документ, почти готово...',
+        );
+      }
 
       const result = await this.formatLimitClient.processDocument(
         user.id,
@@ -2627,8 +2683,13 @@ export class TelegramBotService {
       );
 
       if (!result.success || !result.formattedBase64) {
-        await ctx.reply(
-          `❌ Не удалось отформатировать документ: ${result.reason || 'ошибка сервиса'}`,
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMessage.message_id,
+          undefined,
+          `❌ Не удалось отформатировать документ: ${
+            result.reason || 'ошибка сервиса'
+          }`,
         );
         return;
       }
@@ -2643,14 +2704,53 @@ export class TelegramBotService {
         filename: targetName,
       });
 
-      await ctx.reply(
-        `✅ Готово. Осталось форматирований: ${result.remaining}`,
-      );
+      const doneEmoji = TelegramCustomEmojis.format.done.char;
+      const doneText = ` Готово. Осталось форматирований: ${result.remaining}`;
+      const doneFullText = doneEmoji + doneText;
+
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMessage.message_id,
+          undefined,
+          doneFullText,
+          {
+            entities: [
+              {
+                type: 'custom_emoji',
+                offset: 0,
+                length: doneEmoji.length,
+                custom_emoji_id: TelegramCustomEmojis.format.done.id,
+              },
+            ],
+          } as any,
+        );
+      } catch (e) {
+        this.logger.warn(
+          'Failed to edit done status with custom emoji, falling back to plain text',
+          e as any,
+        );
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMessage.message_id,
+          undefined,
+          `✅ Готово. Осталось форматирований: ${result.remaining}`,
+        );
+      }
     } catch (error) {
       this.logger.error('Document formatting failed', error);
-      await ctx.reply(
-        '❌ Ошибка при обработке документа. Попробуйте позже или отправьте файл снова.',
-      );
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMessage.message_id,
+          undefined,
+          '❌ Ошибка при обработке документа. Попробуйте позже или отправьте файл снова.',
+        );
+      } catch {
+        await ctx.reply(
+          '❌ Ошибка при обработке документа. Попробуйте позже или отправьте файл снова.',
+        );
+      }
     }
   }
 
