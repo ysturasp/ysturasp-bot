@@ -1453,45 +1453,9 @@ export class TelegramBotService {
 
   @Action(/^check_format_payment:(.+)$/)
   async onCheckFormatPayment(@Ctx() ctx: Context) {
-    await ctx.answerCbQuery('Проверяю оплату...');
-    // @ts-ignore
-    const paymentId = ctx.match[1];
-    const user = await this.userHelperService.getUser(ctx);
-
-    try {
-      const status = await this.formatLimitClient.checkPaymentStatus(
-        user.id,
-        paymentId,
-        { isTelegram: true },
-      );
-
-      if (status.status === 'succeeded') {
-        const limit = await this.formatLimitClient.checkLimit(user.id, true);
-        await ctx.reply(
-          `✅ Оплата подтверждена.\n` +
-            `Начислено форматирований: ${status.formatsAdded}\n` +
-            `Текущий остаток: ${limit.remaining ?? 0}`,
-        );
-        return;
-      }
-
-      if (status.status === 'pending') {
-        await ctx.reply(
-          '⏳ Платеж пока в обработке. Подождите 10-30 секунд и нажмите «Проверить оплату» еще раз.',
-        );
-        return;
-      }
-
-      await ctx.reply(
-        `⚠️ Текущий статус платежа: ${status.status}\n` +
-          `Если деньги списались, но статус не меняется, напишите в поддержку.`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to check format payment status', error);
-      await ctx.reply(
-        '❌ Не удалось проверить статус платежа. Попробуйте позже.',
-      );
-    }
+    await ctx.answerCbQuery(
+      'Покупка форматирований теперь через встроенную оплату Telegram. Используйте /format_buy.',
+    );
   }
 
   @Action('open_set_default')
@@ -1751,39 +1715,31 @@ export class TelegramBotService {
   @Command('format_buy')
   async onFormatBuy(@Ctx() ctx: Context) {
     const user = await this.userHelperService.getUser(ctx);
-    try {
-      const payment = await this.formatLimitClient.createPayment(user.id, 10, {
-        isTelegram: true,
-      });
-
-      if (!payment.confirmationUrl) {
-        await ctx.reply(
-          '❌ Не удалось получить ссылку оплаты. Попробуйте позже.',
-        );
-        return;
-      }
-
-      const keyboard = Markup.inlineKeyboard([
-        [
-          Markup.button.callback(
-            '✅ Проверить оплату',
-            `check_format_payment:${payment.paymentId}`,
-          ),
-        ],
-      ]);
-
+    const providerToken = this.configService.get<string>(
+      'YOOKASSA_PROVIDER_TOKEN',
+    );
+    if (!providerToken) {
       await ctx.reply(
-        `💳 Покупка 10 форматирований\n` +
-          `Перейдите по ссылке для оплаты:\n${payment.confirmationUrl}\n\n` +
-          `После оплаты нажмите «Проверить оплату».`,
-        keyboard,
+        '⚠️ Платежи через ЮKassa пока не настроены. Напишите в поддержку.',
       );
-    } catch (error) {
-      this.logger.error('Failed to create format payment', error);
-      await ctx.reply(
-        '❌ Не удалось создать платеж. Попробуйте позже или обратитесь в поддержку.',
-      );
+      return;
     }
+
+    const priceKops = this.configService.get<number>(
+      'FORMAT_10_PRICE_KOPS',
+      85000,
+    );
+
+    await ctx.replyWithInvoice({
+      title: '10 форматирований DOCX по ГОСТ',
+      description:
+        'Пакет из 10 форматирований документов DOCX по ГОСТ.\n' +
+        'Форматирование доступно в личном чате бота. Остаток можно посмотреть командой /format_limit.',
+      payload: 'format_10',
+      provider_token: providerToken,
+      currency: 'RUB',
+      prices: [{ label: '10 форматирований', amount: priceKops }],
+    });
   }
 
   @Command('support_stars')
@@ -3171,6 +3127,31 @@ export class TelegramBotService {
       this.logger.log(
         `AI Plus activated for user ${user.chatId}, expires ${subscription.expiresAt.toISOString()}, charge_id ${payment.provider_payment_charge_id}`,
       );
+      return;
+    }
+
+    if (payload === 'format_10' && user) {
+      try {
+        const result = await this.formatLimitClient.addPaidFormats(
+          user.id,
+          10,
+          { isTelegram: true },
+        );
+
+        await ctx.reply(
+          `✅ Оплата подтверждена.\n` +
+            `Начислено форматирований: ${result.formatsAdded}\n` +
+            `Текущий остаток: ${result.remaining}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          'Failed to add paid formats after Telegram payment',
+          error,
+        );
+        await ctx.reply(
+          '❌ Платеж получен, но не удалось начислить форматирования. Напишите в поддержку.',
+        );
+      }
       return;
     }
 

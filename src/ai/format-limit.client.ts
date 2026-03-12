@@ -33,6 +33,12 @@ interface PaymentStatusResponse {
   updated: boolean;
 }
 
+interface AddCreditsResponse {
+  success: boolean;
+  formatsAdded: number;
+  remaining: number;
+}
+
 @Injectable()
 export class FormatLimitClient {
   private readonly logger = new Logger(FormatLimitClient.name);
@@ -251,6 +257,35 @@ export class FormatLimitClient {
       {
         userId,
         paymentId,
+        isTelegram,
+      },
+      {
+        headers: {
+          'x-internal-token': this.token,
+        },
+      },
+    );
+
+    return data;
+  }
+
+  async addPaidFormats(
+    userId: string,
+    count: number,
+    options?: { isTelegram?: boolean },
+  ): Promise<AddCreditsResponse> {
+    if (!this.isEnabled()) {
+      this.logger.warn('addPaidFormats called but client is not enabled');
+      throw new Error('FormatLimitClient is not configured');
+    }
+
+    const isTelegram = options?.isTelegram ?? true;
+
+    const { data } = await this.http.post<AddCreditsResponse>(
+      '/api/internal/format/add-credits',
+      {
+        userId,
+        count,
         isTelegram,
       },
       {
