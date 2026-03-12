@@ -219,7 +219,7 @@ export class NotificationsService {
 📚 ${lesson.lessonName}
 📝 ${getLessonTypeName(lesson.type)}
 ${lesson.auditoryName ? `🏛 ${lesson.auditoryName}` : ''}${
-      lesson.isDistant ? `\n💻 Дистанционно` : ''
+      lesson.isDistant ? `💻 Дистанционно` : ''
     }
 ${lesson.teacherName ? `👨‍🏫 ${lesson.teacherName}` : ''}`.trim();
 
