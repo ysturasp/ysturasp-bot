@@ -31,6 +31,8 @@ services:
       - AI_PLUS_PRICE_KOPS=${AI_PLUS_PRICE_KOPS}
       - AI_PLUS_REFUND_WINDOW_DAYS=${AI_PLUS_REFUND_WINDOW_DAYS}
       - AI_PLUS_REFUND_REQUIRE_UNUSED=${AI_PLUS_REFUND_REQUIRE_UNUSED}
+    depends_on:
+      - redis
     networks:
       - ysturasp-db
 
