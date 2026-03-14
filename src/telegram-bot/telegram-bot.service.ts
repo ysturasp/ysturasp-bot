@@ -2594,6 +2594,8 @@ export class TelegramBotService {
       const fileLink = await ctx.telegram.getFileLink(document.file_id);
       const response = await axios.get(fileLink.toString(), {
         responseType: 'arraybuffer',
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
       });
       const sourceBuffer = Buffer.from(response.data);
 
@@ -2638,7 +2640,7 @@ export class TelegramBotService {
         { isTelegram: true },
       );
 
-      if (!result.success || !result.formattedBase64) {
+      if (!result.success || !result.formattedBuffer) {
         await ctx.telegram.editMessageText(
           ctx.chat.id,
           statusMessage.message_id,
@@ -2650,10 +2652,16 @@ export class TelegramBotService {
         return;
       }
 
-      const formattedBuffer = Buffer.from(result.formattedBase64, 'base64');
-      const targetName = originalFileName.endsWith('.docx')
-        ? `${originalFileName.slice(0, -5)}_gost.docx`
-        : `${originalFileName}_gost.docx`;
+      const formattedBuffer = result.formattedBuffer;
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = String(now.getFullYear());
+      const suffix = ` (format by ysturasp, ${dd}.${mm}.${yyyy})`;
+      const baseName = originalFileName.endsWith('.docx')
+        ? originalFileName.slice(0, -5)
+        : originalFileName;
+      const targetName = `${baseName}${suffix}.docx`;
 
       await ctx.replyWithDocument({
         source: formattedBuffer,

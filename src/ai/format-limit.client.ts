@@ -23,6 +23,7 @@ interface CreatePaymentResponse {
 interface ProcessDocumentResponse {
   success: boolean;
   formattedBase64?: string;
+  fileUrl?: string;
   remaining: number;
   reason?: string;
 }
@@ -191,7 +192,7 @@ export class FormatLimitClient {
     fileName: string,
     fileBase64: string,
     options?: { isTelegram?: boolean },
-  ): Promise<ProcessDocumentResponse> {
+  ): Promise<ProcessDocumentResponse & { formattedBuffer?: Buffer }> {
     if (!this.isEnabled()) {
       this.logger.warn('processDocument called but client is not enabled');
       return {
@@ -222,6 +223,24 @@ export class FormatLimitClient {
         },
       );
 
+      if (data.success && data.fileUrl) {
+        if (data.formattedBase64) {
+          return {
+            ...data,
+            formattedBuffer: Buffer.from(data.formattedBase64, 'base64'),
+          };
+        }
+        const fileBuffer = await this.downloadFormattedFile(data.fileUrl);
+        return { ...data, formattedBuffer: fileBuffer };
+      }
+
+      if (data.success && data.formattedBase64) {
+        return {
+          ...data,
+          formattedBuffer: Buffer.from(data.formattedBase64, 'base64'),
+        };
+      }
+
       return data;
     } catch (error: any) {
       this.logger.error('Failed to process document', error);
@@ -239,6 +258,20 @@ export class FormatLimitClient {
         reason: 'Internal error while processing document',
       };
     }
+  }
+
+  private async downloadFormattedFile(fileUrl: string): Promise<Buffer> {
+    const url = fileUrl.startsWith('http')
+      ? fileUrl
+      : `${this.baseUrl}${fileUrl}`;
+    const { data } = await this.http.get<ArrayBuffer>(url, {
+      responseType: 'arraybuffer',
+      timeout: 30_000,
+      headers: {
+        'x-internal-token': this.token,
+      },
+    });
+    return Buffer.from(data);
   }
 
   async checkPaymentStatus(
